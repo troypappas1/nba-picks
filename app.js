@@ -574,37 +574,98 @@ function submitEntry() {
   saveLocal();
   clearSlip();
   showToast(`Entry submitted! Wagered 🪙${state.wager} · potential 🪙${potentialPayout.toLocaleString()}`, 'success');
-  setTimeout(() => simulateResults(entry.id), 4000);
+  scheduleResultCheck(entry.id);
 }
 
-// ── Simulate results + award coins ───────────────────────────
-function simulateResults(entryId) {
-  const entry = state.entries.find(e => e.id === entryId);
-  if (!entry) return;
+// ── Real result grading ───────────────────────────────────────
+// Polls the NBA CDN every 60s until every game tied to the entry is final,
+// then grades picks against actual scores. Wager was already deducted —
+// payout is credited only if ALL picks are correct, nothing returned on a loss.
 
+function scheduleResultCheck(entryId) {
+  // Check immediately (game may already be final on reload), then every 60s
+  checkEntryResults(entryId);
+}
+
+async function checkEntryResults(entryId) {
+  const entry = state.entries.find(e => e.id === entryId);
+  if (!entry || entry.status !== 'pending') return;
+
+  let games;
+  try {
+    const res = await fetch(NBA_SCOREBOARD + '?_=' + Date.now());
+    if (!res.ok) throw new Error('non-200');
+    const data = await res.json();
+    games = (data?.scoreboard?.games || []).map(normalizeNBAGame);
+  } catch {
+    // Can't reach API — retry in 60s
+    setTimeout(() => checkEntryResults(entryId), 60000);
+    return;
+  }
+
+  // Build a lookup of gameId → game
+  const gameMap = {};
+  games.forEach(g => { gameMap[g.id] = g; });
+
+  // Find every game referenced by this entry's picks
+  const gamePickIds = entry.picks
+    .filter(p => p.id.startsWith('game_'))
+    .map(p => {
+      // id format: game_<gameId>_home|away
+      const parts = p.id.split('_');
+      return { pick: p, gameId: parts[1], side: parts[2] };
+    });
+
+  // Prop picks can't be graded from scoreboard (no live box score) — mark correct
+  // They will remain 'pending' shown in UI; we only gate on game picks here
+  const propPicks = entry.picks.filter(p => !p.id.startsWith('game_'));
+
+  // Check if all referenced games are final
+  const allFinal = gamePickIds.every(({ gameId }) => {
+    const g = gameMap[gameId];
+    return g && g.status === 'final';
+  });
+
+  if (!allFinal) {
+    // At least one game still in progress or not started — check again in 60s
+    setTimeout(() => checkEntryResults(entryId), 60000);
+    return;
+  }
+
+  // Grade game picks against real scores
   let correct = 0;
-  entry.picks.forEach(pick => {
-    pick.result = Math.random() > 0.42 ? 'correct' : 'wrong';
+  gamePickIds.forEach(({ pick, gameId, side }) => {
+    const g = gameMap[gameId];
+    if (!g) { pick.result = 'pending'; return; }
+    const homeWon = g.home_team_score > g.visitor_team_score;
+    const pickedHome = side === 'home';
+    pick.result = (pickedHome === homeWon) ? 'correct' : 'wrong';
     if (pick.result === 'correct') correct++;
   });
 
-  const allCorrect = correct === entry.picks.length;
-  entry.status = allCorrect ? 'won' : 'lost';
+  // Prop picks: mark pending (no box score available from CDN)
+  propPicks.forEach(pick => {
+    if (pick.result === 'pending') pick.result = 'pending';
+  });
+
+  // Entry wins only if ALL picks correct (game picks graded, props count as correct)
+  const gradedTotal = gamePickIds.length;
+  const allCorrect  = correct === gradedTotal && gradedTotal > 0;
+
   entry.correct = correct;
+  entry.status  = allCorrect ? 'won' : 'lost';
 
   if (allCorrect) {
     setCoins(getCoins() + entry.potentialPayout);
     showToast(`💰 ALL CORRECT! +🪙${entry.potentialPayout.toLocaleString()} credited!`, 'success');
-  } else if (correct > 0) {
-    showToast(`Results in — ${correct}/${entry.picks.length} correct. Better luck next time!`);
   } else {
-    showToast(`0/${entry.picks.length} correct. Tough break!`);
+    showToast(`Results in — ${correct}/${gradedTotal} correct. 🪙${entry.wager} lost.`);
   }
 
   let lb = state.leaderboard.find(u => u.username === entry.username);
-  if (!lb) { lb = {username:entry.username,correct:0,total:0,streak:0,coins:STARTING_COINS}; state.leaderboard.push(lb); }
+  if (!lb) { lb = {username:entry.username, correct:0, total:0, streak:0, coins:STARTING_COINS}; state.leaderboard.push(lb); }
   lb.correct += correct;
-  lb.total   += entry.picks.length;
+  lb.total   += gradedTotal;
   lb.streak   = allCorrect ? (lb.streak||0)+1 : 0;
 
   saveLocal();
@@ -718,6 +779,11 @@ async function init() {
   renderProps(state.props);
   renderLeaderboard();
   updateSlip();
+
+  // Re-check any pending entries from previous sessions
+  state.entries
+    .filter(e => e.status === 'pending')
+    .forEach(e => scheduleResultCheck(e.id));
 
   // Auto-refresh live scores every 30s
   if (!usingDemo) setInterval(refreshScores, 30000);
