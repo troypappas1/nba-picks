@@ -149,12 +149,12 @@ function migrateV1toV2() {
 
 // ── Coins ─────────────────────────────────────────────────────
 function getOrCreateLbEntry(username) {
-  let lb = state.leaderboard.find(u => u.username === username);
+  const key = username.toLowerCase();
+  let lb = state.leaderboard.find(u => u.username.toLowerCase() === key);
   if (!lb) {
     lb = { username, correct: 0, total: 0, streak: 0, coins: STARTING_COINS };
     state.leaderboard.push(lb);
   }
-  // Backfill coins field for entries saved before coins existed
   if (lb.coins === undefined) lb.coins = STARTING_COINS;
   return lb;
 }
@@ -203,15 +203,31 @@ function initAuth() {
   input.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
 
   function doLogin() {
-    const name = input.value.trim();
-    if (!name) return showToast('Enter a username','error');
-    state.user = { username: name, joined: Date.now() };
+    const raw  = input.value.trim();
+    if (!raw) return showToast('Enter a username','error');
+
+    // Normalise to lowercase so "Troy" and "troy" are the same account
+    const name = raw.toLowerCase();
+
+    // Find existing account (case-insensitive) or create new one
+    const existing = state.leaderboard.find(u => u.username.toLowerCase() === name);
+    const canonical = existing ? existing.username : name;
+
+    state.user = { username: canonical, joined: existing ? existing.joined || Date.now() : Date.now() };
     saveLocal();
-    getOrCreateLbEntry(name);
+    const lb = getOrCreateLbEntry(canonical);
     saveLocal();
     applyUser();
     modal.classList.add('hidden');
-    showToast(`Welcome, ${name}! You have ${STARTING_COINS.toLocaleString()} coins 🪙`, 'success');
+
+    const coins = lb.coins;
+    const isReturning = existing && lb.total > 0;
+    showToast(
+      isReturning
+        ? `Welcome back, ${canonical}! 🪙${coins.toLocaleString()} coins`
+        : `Welcome, ${canonical}! You have 🪙${coins.toLocaleString()} to start`,
+      'success'
+    );
     renderLeaderboard();
   }
 
