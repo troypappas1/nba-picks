@@ -293,7 +293,7 @@ function normalizeNBAGame(g) {
   }
 
   return {
-    id: g.gameId,
+    id: String(g.gameId).padStart(10, '0'),
     status: statusText,
     time: timeStr,
     period: g.period || 0,
@@ -658,9 +658,9 @@ async function checkEntryResults(entryId) {
     return;
   }
 
-  // Build a lookup of gameId → game
+  // Build a lookup of gameId → game (keys are padded 10-char strings)
   const gameMap = {};
-  games.forEach(g => { gameMap[g.id] = g; });
+  games.forEach(g => { gameMap[String(g.id).padStart(10,'0')] = g; });
 
   // Find every game referenced by this entry's picks
   const gamePickIds = entry.picks
@@ -854,26 +854,27 @@ async function loadTracker(pick, el, entry) {
 async function loadGameTracker(pick, el) {
   // pick.id = game_<gameId>_home|away
   const parts  = pick.id.split('_');
-  const gameId = parts[1];
+  const gameId = String(parts[1]).padStart(10, '0');
   const side   = parts[2];
 
-  const game = state.games.find(g => String(g.id) === String(gameId));
-  if (!game) {
+  // Refresh score from CDN
+  let liveGame = state.games.find(g => String(g.id).padStart(10,'0') === gameId) || null;
+  try {
+    const res  = await fetch(NBA_SCOREBOARD + '?_=' + Date.now());
+    const data = await res.json();
+    const found = (data?.scoreboard?.games||[])
+      .map(normalizeNBAGame)
+      .find(g => String(g.id).padStart(10,'0') === gameId);
+    if (found) liveGame = found;
+  } catch {}
+
+  if (!liveGame) {
     el.innerHTML = '<p class="tracker-empty">Game data not available yet.</p>';
     return;
   }
 
-  // Refresh score live
-  let liveGame = game;
-  try {
-    const res  = await fetch(NBA_SCOREBOARD + '?_=' + Date.now());
-    const data = await res.json();
-    const found = (data?.scoreboard?.games||[]).map(normalizeNBAGame).find(g => String(g.id)===String(gameId));
-    if (found) liveGame = found;
-  } catch {}
-
-  const hs = liveGame.home_team_score;
-  const as = liveGame.visitor_team_score;
+  const hs = liveGame.home_team_score || 0;
+  const as = liveGame.visitor_team_score || 0;
   const pickedTeam  = side==='home' ? liveGame.home_team : liveGame.visitor_team;
   const otherTeam   = side==='home' ? liveGame.visitor_team : liveGame.home_team;
   const pickedScore = side==='home' ? hs : as;
@@ -883,23 +884,29 @@ async function loadGameTracker(pick, el) {
   const diff        = pickedScore - otherScore;
   const isFinal     = liveGame.status === 'final';
   const isLive      = liveGame.status === 'live';
+  const isPreGame   = liveGame.status === 'scheduled';
 
-  // Bar: fill based on lead, max visual at 20pt lead
-  const maxLead    = 20;
-  const clampedPct = Math.min(100, Math.max(0, ((pickedScore / Math.max(pickedScore + otherScore, 1)) * 100)));
-  const barColor   = isFinal ? (isWinning?'var(--green)':'var(--red)') : isWinning ? 'var(--green)' : isTied ? 'var(--yellow)' : 'var(--red)';
-  const statusLine = isFinal
-    ? (isWinning ? `✓ ${pickedTeam.abbreviation} won` : `✗ ${pickedTeam.abbreviation} lost`)
-    : isLive
-    ? (isTied ? 'Tied' : isWinning ? `+${diff} lead` : `Down ${Math.abs(diff)}`)
-    : 'Pre-game';
+  // Bar: 0% pre-game, 50% = tied, fills toward 100% as lead grows (max at ~20pt lead)
+  let clampedPct, barColor, statusLine;
+  if (isPreGame) {
+    clampedPct = 0;
+    barColor   = 'var(--text3)';
+    statusLine = `Pre-game · ${liveGame.time}`;
+  } else {
+    const total = pickedScore + otherScore;
+    clampedPct  = total === 0 ? 50 : Math.min(100, Math.max(0, (pickedScore / total) * 100));
+    barColor    = isFinal ? (isWinning?'var(--green)':'var(--red)') : isWinning ? 'var(--green)' : isTied ? 'var(--yellow)' : 'var(--red)';
+    statusLine  = isFinal
+      ? (isWinning ? `✓ ${pickedTeam.abbreviation} won` : `✗ ${pickedTeam.abbreviation} lost`)
+      : isTied ? 'Tied 0-0' : isWinning ? `+${diff} lead` : `Down ${Math.abs(diff)}`;
+  }
 
   el.innerHTML = `
     <div class="tracker-box">
       <div class="tracker-matchup-row">
-        <span class="tracker-team picked">${TEAM_EMOJI[pickedTeam.abbreviation]||'🏀'} ${pickedTeam.abbreviation} <span class="tracker-score">${pickedScore}</span></span>
+        <span class="tracker-team picked">${TEAM_EMOJI[pickedTeam.abbreviation]||'🏀'} ${pickedTeam.abbreviation} <span class="tracker-score">${isPreGame ? '—' : pickedScore}</span></span>
         <span class="tracker-vs">vs</span>
-        <span class="tracker-team other">${TEAM_EMOJI[otherTeam.abbreviation]||'🏀'} ${otherTeam.abbreviation} <span class="tracker-score">${otherScore}</span></span>
+        <span class="tracker-team other">${TEAM_EMOJI[otherTeam.abbreviation]||'🏀'} ${otherTeam.abbreviation} <span class="tracker-score">${isPreGame ? '—' : otherScore}</span></span>
       </div>
       <div class="tracker-bar-wrap">
         <div class="tracker-bar-label">
@@ -912,7 +919,7 @@ async function loadGameTracker(pick, el) {
         </div>
         <div class="tracker-bar-ends"><span>Behind</span><span>Even</span><span>Ahead</span></div>
       </div>
-      ${isLive ? '<div class="tracker-live-dot">● LIVE</div>' : ''}
+      ${isLive ? `<div class="tracker-live-dot">● LIVE · ${liveGame.time}</div>` : ''}
       ${isFinal ? '<div class="tracker-final-tag">FINAL</div>' : ''}
     </div>
   `;
@@ -932,14 +939,20 @@ async function loadPropTracker(pick, el, entry) {
   ) : null;
 
   if (!game) {
-    renderPropTrackerBar(el, pick.label, stat, line, dir, null, 'Game not found');
+    renderPropTrackerBar(el, pick.label, stat, line, dir, null, 'Game not found — check back closer to tip-off.');
+    return;
+  }
+
+  if (game.status === 'scheduled') {
+    renderPropTrackerBar(el, pick.label, stat, line, dir, 0, null, true);
     return;
   }
 
   // Fetch box score
   let current = null;
   try {
-    const url = `https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_${game.id}.json?_=${Date.now()}`;
+    const paddedId = String(game.id).padStart(10, '0');
+    const url = `https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_${paddedId}.json?_=${Date.now()}`;
     const res  = await fetch(url);
     const data = await res.json();
     const allPlayers = [
@@ -964,7 +977,7 @@ async function loadPropTracker(pick, el, entry) {
     current === null ? 'Live box score unavailable — check back during/after game' : null);
 }
 
-function renderPropTrackerBar(el, playerName, stat, line, dir, current, note) {
+function renderPropTrackerBar(el, playerName, stat, line, dir, current, note, isPreGame = false) {
   if (current === null) {
     el.innerHTML = `
       <div class="tracker-box">
@@ -977,14 +990,16 @@ function renderPropTrackerBar(el, playerName, stat, line, dir, current, note) {
     return;
   }
 
-  const pct = Math.min(100, (current / (line * 1.5)) * 100);
-  const linePct = (line / (line * 1.5)) * 100;
-  const hitting = dir==='over' ? current >= line : current <= line;
-  const barColor = hitting ? 'var(--green)' : 'var(--red)';
-  const remaining = dir==='over' ? Math.max(0, line - current) : null;
-  const statusLine = dir==='over'
-    ? (current >= line ? `✓ Hit! (${current} pts)` : `Need ${(line-current).toFixed(1)} more`)
-    : (current <= line ? `✓ Tracking under` : `⚠ ${(current-line).toFixed(1)} over line`);
+  const maxVal   = line * 1.5;
+  const pct      = isPreGame ? 0 : Math.min(100, (current / maxVal) * 100);
+  const linePct  = (line / maxVal) * 100;
+  const hitting  = isPreGame ? null : (dir==='over' ? current >= line : current <= line);
+  const barColor = isPreGame ? 'var(--text3)' : hitting ? 'var(--green)' : 'var(--red)';
+  const statusLine = isPreGame
+    ? 'Game hasn\'t started yet'
+    : dir==='over'
+      ? (current >= line ? `✓ Hit! (${current})` : `Need ${(line - current).toFixed(1)} more`)
+      : (current <= line ? `✓ Tracking under (${current})` : `⚠ ${(current - line).toFixed(1)} over line`);
 
   el.innerHTML = `
     <div class="tracker-box">
@@ -993,14 +1008,14 @@ function renderPropTrackerBar(el, playerName, stat, line, dir, current, note) {
         <span class="tracker-prop-line">${dir==='over'?'▲ Over':'▼ Under'} ${line} ${stat}</span>
       </div>
       <div class="tracker-stat-display">
-        <span class="tracker-current-val" style="color:${barColor}">${current}</span>
+        <span class="tracker-current-val" style="color:${barColor}">${isPreGame ? '0' : current}</span>
         <span class="tracker-stat-label">${stat.toLowerCase()} so far</span>
       </div>
       <div class="tracker-bar-wrap">
         <div class="tracker-bar-label">
           <span>0</span>
           <span class="tracker-status-label" style="color:${barColor}">${statusLine}</span>
-          <span>${(line*1.5).toFixed(0)}</span>
+          <span>${maxVal.toFixed(0)}</span>
         </div>
         <div class="tracker-bar-bg" style="position:relative">
           <div class="tracker-bar-fill" style="width:${pct}%;background:${barColor}"></div>
