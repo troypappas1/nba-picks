@@ -288,11 +288,11 @@ function buildPropsFromGames(games) {
 // ── Fallback demo games ───────────────────────────────────────
 function getDemoGames() {
   const pairs = [
-    ['NYK','ATL'],['CLE','TOR'],['DEN','MIN'],['LAL','GSW'],
+    ['NYK','ATL'],['CLE','TOR'],['DEN','MIN'],
   ];
   return pairs.map(([away,home], i) => ({
     id: 'demo_'+i, status:'scheduled',
-    time: ['7:00 PM ET','8:00 PM ET','9:30 PM ET','10:00 PM ET'][i],
+    time: ['7:00 PM ET','8:00 PM ET','9:30 PM ET'][i],
     period:0, gameClock:'', seriesText:'',
     home_team:{ full_name: TEAM_FULL[home]||home, abbreviation:home },
     visitor_team:{ full_name: TEAM_FULL[away]||away, abbreviation:away },
