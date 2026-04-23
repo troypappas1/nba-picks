@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HoopPicks — NBA Daily Picks</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <span class="logo">🏀 HoopPicks</span>
+    </div>
+    <div class="nav-center">
+      <button class="nav-btn active" data-tab="picks">Make Picks</button>
+      <button class="nav-btn" data-tab="leaderboard">Leaderboard</button>
+      <button class="nav-btn" data-tab="my-picks">My Picks</button>
+    </div>
+    <div class="nav-right">
+      <div class="user-badge" id="user-badge">
+        <span class="user-avatar">👤</span>
+        <span id="username-display">Guest</span>
+      </div>
+      <button class="btn-primary" id="login-btn">Sign In</button>
+    </div>
+  </nav>
+
+  <!-- LOGIN MODAL -->
+  <div class="modal-overlay" id="login-modal">
+    <div class="modal">
+      <button class="modal-close" id="modal-close">✕</button>
+      <h2>Join HoopPicks</h2>
+      <p class="modal-sub">Enter a username to start making picks</p>
+      <input type="text" id="username-input" placeholder="Your username..." maxlength="20" />
+      <button class="btn-primary full-width" id="login-submit">Let's Go</button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main>
+
+    <!-- DATE BAR -->
+    <div class="date-bar">
+      <div class="date-info">
+        <span class="date-label">Today's Games</span>
+        <span class="date-value" id="today-date"></span>
+      </div>
+      <div class="picks-count-badge">
+        <span id="picks-count">0</span> picks selected
+        <button class="btn-submit-picks" id="submit-picks-btn" disabled>Submit Entry</button>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tab-content" id="tab-picks">
+
+      <!-- LOADING STATE -->
+      <div class="loading-state" id="loading-state">
+        <div class="spinner"></div>
+        <p>Loading today's NBA games...</p>
+      </div>
+
+      <!-- NO GAMES STATE -->
+      <div class="no-games-state hidden" id="no-games-state">
+        <div class="no-games-icon">🏀</div>
+        <h3>No Games Today</h3>
+        <p>Check back on a game day. Showing demo picks below.</p>
+      </div>
+
+      <!-- SECTION: GAME PICKS (moneyline) -->
+      <section class="picks-section" id="games-section">
+        <div class="section-header">
+          <h2>Game Results <span class="badge">Pick the Winner</span></h2>
+        </div>
+        <div class="cards-grid" id="games-grid">
+          <!-- injected by JS -->
+        </div>
+      </section>
+
+      <!-- SECTION: PLAYER PROPS (over/under) -->
+      <section class="picks-section" id="props-section">
+        <div class="section-header">
+          <h2>Player Props <span class="badge">Over / Under</span></h2>
+        </div>
+        <div class="cards-grid" id="props-grid">
+          <!-- injected by JS -->
+        </div>
+      </section>
+
+    </div>
+
+    <!-- MY PICKS TAB -->
+    <div class="tab-content hidden" id="tab-my-picks">
+      <div class="my-picks-wrapper">
+        <h2>My Submitted Entries</h2>
+        <div id="my-picks-list">
+          <p class="empty-msg">No entries yet. Make some picks!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD TAB -->
+    <div class="tab-content hidden" id="tab-leaderboard">
+      <div class="leaderboard-wrapper">
+        <div class="leaderboard-header">
+          <h2>Leaderboard</h2>
+          <span class="lb-subtitle">Updated after game results</span>
+        </div>
+        <div class="lb-table-wrap">
+          <table class="lb-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Correct</th>
+                <th>Total</th>
+                <th>Accuracy</th>
+                <th>Streak</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+              <!-- injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ENTRY SLIP (sidebar) -->
+  <div class="entry-slip" id="entry-slip">
+    <div class="slip-header">
+      <span>Entry Slip</span>
+      <button class="clear-slip" id="clear-slip">Clear</button>
+    </div>
+    <div class="slip-picks" id="slip-picks">
+      <p class="slip-empty">Add picks to build your entry</p>
+    </div>
+    <div class="slip-footer">
+      <div class="slip-stat">
+        <span>Picks</span><span id="slip-count">0 / 6</span>
+      </div>
+      <button class="btn-primary full-width" id="slip-submit" disabled>Submit Entry</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
