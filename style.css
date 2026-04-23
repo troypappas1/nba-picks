@@ -637,6 +637,110 @@ main {
 }
 .modal input:focus { border-color: var(--accent); }
 
+/* ===== COIN BADGE ===== */
+.coin-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+.coin-icon { font-size: 1rem; }
+
+/* ===== WAGER SECTION ===== */
+.wager-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.wager-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.wager-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.wager-btn {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text2);
+  padding: 7px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.wager-btn:hover { border-color: #fbbf24; color: #fbbf24; }
+.wager-btn.active { background: rgba(251,191,36,0.15); border-color: #fbbf24; color: #fbbf24; }
+
+/* ===== TIER GRID ===== */
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.tier-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 2px;
+  cursor: default;
+}
+.tier-picks {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--tc, var(--text2));
+}
+.tier-mult {
+  font-size: 0.62rem;
+  color: var(--tc, var(--text3));
+  font-weight: 600;
+}
+
+/* ===== GAME STATUS FINAL ===== */
+.game-status-final {
+  color: var(--text3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.series-badge {
+  background: rgba(168,85,247,0.15);
+  color: var(--accent2);
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.team-name-small {
+  font-size: 0.68rem;
+  color: var(--text3);
+  text-align: center;
+}
+.lb-coins {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed;

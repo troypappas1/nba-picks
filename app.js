@@ -1,63 +1,110 @@
 /* ============================================================
    HoopPicks — app.js
-   Uses balldontlie API v1 (free, no key required for basic use)
-   Docs: https://www.balldontlie.io/
+   Live games: NBA official CDN scoreboard (no auth required)
+   Coins: wager system with tiered multipliers
 ============================================================ */
 
-const API_BASE = 'https://api.balldontlie.io/v1';
+const NBA_SCOREBOARD = 'https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/scoreboard/todaysScoreboard_00.json';
 
-// ── Team emoji map ──────────────────────────────────────────
+// ── Team maps ───────────────────────────────────────────────
 const TEAM_EMOJI = {
-  'Atlanta Hawks': '🦅', 'Boston Celtics': '🍀', 'Brooklyn Nets': '🕸️',
-  'Charlotte Hornets': '🐝', 'Chicago Bulls': '🐂', 'Cleveland Cavaliers': '⚔️',
-  'Dallas Mavericks': '🤠', 'Denver Nuggets': '⛏️', 'Detroit Pistons': '⚙️',
-  'Golden State Warriors': '💛', 'Houston Rockets': '🚀', 'Indiana Pacers': '🏎️',
-  'LA Clippers': '✂️', 'Los Angeles Lakers': '💜', 'Memphis Grizzlies': '🐻',
-  'Miami Heat': '🔥', 'Milwaukee Bucks': '🦌', 'Minnesota Timberwolves': '🐺',
-  'New Orleans Pelicans': '🦩', 'New York Knicks': '🗽', 'Oklahoma City Thunder': '⚡',
-  'Orlando Magic': '🪄', 'Philadelphia 76ers': '🔔', 'Phoenix Suns': '☀️',
-  'Portland Trail Blazers': '🌲', 'Sacramento Kings': '👑', 'San Antonio Spurs': '🤠',
-  'Toronto Raptors': '🦖', 'Utah Jazz': '🎷', 'Washington Wizards': '🧙'
+  ATL:'🦅', BOS:'🍀', BKN:'🕸️', CHA:'🐝', CHI:'🐂', CLE:'⚔️',
+  DAL:'🤠', DEN:'⛏️', DET:'⚙️', GSW:'💛', HOU:'🚀', IND:'🏎️',
+  LAC:'✂️', LAL:'💜', MEM:'🐻', MIA:'🔥', MIL:'🦌', MIN:'🐺',
+  NOP:'🦩', NYK:'🗽', OKC:'⚡', ORL:'🪄', PHI:'🔔', PHX:'☀️',
+  POR:'🌲', SAC:'👑', SAS:'🤠', TOR:'🦖', UTA:'🎷', WAS:'🧙'
+};
+const TEAM_FULL = {
+  ATL:'Atlanta Hawks', BOS:'Boston Celtics', BKN:'Brooklyn Nets',
+  CHA:'Charlotte Hornets', CHI:'Chicago Bulls', CLE:'Cleveland Cavaliers',
+  DAL:'Dallas Mavericks', DEN:'Denver Nuggets', DET:'Detroit Pistons',
+  GSW:'Golden State Warriors', HOU:'Houston Rockets', IND:'Indiana Pacers',
+  LAC:'LA Clippers', LAL:'Los Angeles Lakers', MEM:'Memphis Grizzlies',
+  MIA:'Miami Heat', MIL:'Milwaukee Bucks', MIN:'Minnesota Timberwolves',
+  NOP:'New Orleans Pelicans', NYK:'New York Knicks', OKC:'Oklahoma City Thunder',
+  ORL:'Orlando Magic', PHI:'Philadelphia 76ers', PHX:'Phoenix Suns',
+  POR:'Portland Trail Blazers', SAC:'Sacramento Kings', SAS:'San Antonio Spurs',
+  TOR:'Toronto Raptors', UTA:'Utah Jazz', WAS:'Washington Wizards'
 };
 
-const PLAYER_EMOJI = ['🏀', '⚡', '🔥', '💪', '🎯', '👑', '🦁', '🐉', '⭐', '🚀'];
+// Known star players per team for prop generation
+const TEAM_STARS = {
+  ATL:[{n:'Trae Young',s:'Points',l:26.5},{n:'Dejounte Murray',s:'Assists',l:5.5}],
+  BOS:[{n:'Jayson Tatum',s:'Points',l:27.5},{n:'Jaylen Brown',s:'Points',l:23.5}],
+  BKN:[{n:'Cam Thomas',s:'Points',l:22.5},{n:'Ben Simmons',s:'Rebounds',l:7.5}],
+  CHA:[{n:'LaMelo Ball',s:'Assists',l:7.5},{n:'Miles Bridges',s:'Points',l:18.5}],
+  CHI:[{n:'Zach LaVine',s:'Points',l:22.5},{n:'Nikola Vucevic',s:'Rebounds',l:10.5}],
+  CLE:[{n:'Donovan Mitchell',s:'Points',l:25.5},{n:'Darius Garland',s:'Assists',l:6.5}],
+  DAL:[{n:'Luka Doncic',s:'Points',l:30.5},{n:'Kyrie Irving',s:'Points',l:23.5}],
+  DEN:[{n:'Nikola Jokic',s:'Rebounds',l:12.5},{n:'Jamal Murray',s:'Points',l:21.5}],
+  DET:[{n:'Cade Cunningham',s:'Points',l:22.5},{n:'Jalen Duren',s:'Rebounds',l:10.5}],
+  GSW:[{n:'Stephen Curry',s:'Points',l:28.5},{n:'Klay Thompson',s:'Points',l:17.5}],
+  HOU:[{n:'Alperen Sengun',s:'Rebounds',l:9.5},{n:'Jalen Green',s:'Points',l:22.5}],
+  IND:[{n:'Tyrese Haliburton',s:'Assists',l:10.5},{n:'Pascal Siakam',s:'Points',l:21.5}],
+  LAC:[{n:'Kawhi Leonard',s:'Points',l:22.5},{n:'Paul George',s:'Points',l:22.5}],
+  LAL:[{n:'LeBron James',s:'Points',l:24.5},{n:'Anthony Davis',s:'Rebounds',l:13.5}],
+  MEM:[{n:'Ja Morant',s:'Points',l:24.5},{n:'Jaren Jackson Jr.',s:'Blocks',l:2.5}],
+  MIA:[{n:'Jimmy Butler',s:'Points',l:21.5},{n:'Bam Adebayo',s:'Rebounds',l:10.5}],
+  MIL:[{n:'Giannis Antetokounmpo',s:'Points',l:31.5},{n:'Damian Lillard',s:'Assists',l:6.5}],
+  MIN:[{n:'Anthony Edwards',s:'Points',l:25.5},{n:'Rudy Gobert',s:'Rebounds',l:12.5}],
+  NOP:[{n:'Zion Williamson',s:'Points',l:24.5},{n:'Brandon Ingram',s:'Points',l:21.5}],
+  NYK:[{n:'Jalen Brunson',s:'Points',l:24.5},{n:'Julius Randle',s:'Rebounds',l:9.5}],
+  OKC:[{n:'Shai Gilgeous-Alexander',s:'Points',l:30.5},{n:'Jalen Williams',s:'Points',l:21.5}],
+  ORL:[{n:'Paolo Banchero',s:'Points',l:22.5},{n:'Franz Wagner',s:'Points',l:19.5}],
+  PHI:[{n:'Joel Embiid',s:'Points',l:29.5},{n:'Tyrese Maxey',s:'Points',l:23.5}],
+  PHX:[{n:'Kevin Durant',s:'Points',l:27.5},{n:'Devin Booker',s:'Points',l:26.5}],
+  POR:[{n:'Damian Lillard',s:'Points',l:27.5},{n:'Jerami Grant',s:'Points',l:19.5}],
+  SAC:[{n:'De\'Aaron Fox',s:'Points',l:23.5},{n:'Domantas Sabonis',s:'Rebounds',l:12.5}],
+  SAS:[{n:'Victor Wembanyama',s:'Points',l:22.5},{n:'Devin Vassell',s:'Points',l:17.5}],
+  TOR:[{n:'Scottie Barnes',s:'Points',l:19.5},{n:'RJ Barrett',s:'Points',l:19.5}],
+  UTA:[{n:'Lauri Markkanen',s:'Points',l:22.5},{n:'Collin Sexton',s:'Points',l:18.5}],
+  WAS:[{n:'Kyle Kuzma',s:'Points',l:20.5},{n:'Bradley Beal',s:'Points',l:21.5}],
+};
 
-// ── State ───────────────────────────────────────────────────
+const PLAYER_EMOJI = ['🏀','⚡','🔥','💪','🎯','👑','🦁','🐉','⭐','🚀','🎪','🏆'];
+
+// ── Coin reward tiers ────────────────────────────────────────
+const COIN_TIERS = [
+  { picks: 1, mult: 1.5,  label: '1 Pick',  color: '#64748b' },
+  { picks: 2, mult: 3,    label: '2 Picks',  color: '#22c55e' },
+  { picks: 3, mult: 6,    label: '3 Picks',  color: '#3b82f6' },
+  { picks: 4, mult: 12,   label: '4 Picks',  color: '#a855f7' },
+  { picks: 5, mult: 25,   label: '5 Picks',  color: '#f59e0b' },
+  { picks: 6, mult: 60,   label: '6 Picks',  color: '#ef4444' },
+];
+const STARTING_COINS = 1000;
+const WAGER_OPTIONS = [50, 100, 250, 500];
+
+// ── State ────────────────────────────────────────────────────
 let state = {
   user: null,
-  picks: {},       // { pickId: { id, label, detail, pickType } }
-  entries: [],     // submitted entries
-  leaderboard: [], // array of { username, correct, total, streak }
+  picks: {},
+  entries: [],
+  leaderboard: [],
   games: [],
   props: [],
+  wager: 100,
 };
 
-// ── Utility ─────────────────────────────────────────────────
+// ── Utils ────────────────────────────────────────────────────
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-
 function fmtDate(str) {
-  return new Date(str + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  return new Date(str + 'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 }
+function rand(a,b){return Math.random()*(b-a)+a;}
+function randInt(a,b){return Math.floor(rand(a,b+1));}
 
-function rand(min, max) { return Math.random() * (max - min) + min; }
-function randInt(min, max) { return Math.floor(rand(min, max+1)); }
-
-function showToast(msg, type = '') {
+function showToast(msg, type='') {
   let t = document.getElementById('toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast';
-    t.className = 'toast';
-    document.body.appendChild(t);
-  }
+  if (!t) { t = document.createElement('div'); t.id='toast'; t.className='toast'; document.body.appendChild(t); }
   t.textContent = msg;
   t.className = 'toast ' + type;
   void t.offsetWidth;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 // ── LocalStorage ─────────────────────────────────────────────
@@ -66,66 +113,79 @@ function saveLocal() {
   localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
   localStorage.setItem('hoopp_lb', JSON.stringify(state.leaderboard));
 }
-
 function loadLocal() {
   try { state.user = JSON.parse(localStorage.getItem('hoopp_user')); } catch {}
   try { state.entries = JSON.parse(localStorage.getItem('hoopp_entries')) || []; } catch {}
   try { state.leaderboard = JSON.parse(localStorage.getItem('hoopp_lb')) || []; } catch {}
 }
 
-// ── Auth ─────────────────────────────────────────────────────
+// ── Coins ─────────────────────────────────────────────────────
+function getCoins() {
+  if (!state.user) return 0;
+  const lb = state.leaderboard.find(u => u.username === state.user.username);
+  return lb ? lb.coins : STARTING_COINS;
+}
+function setCoins(n) {
+  const lb = state.leaderboard.find(u => u.username === state.user.username);
+  if (lb) lb.coins = Math.max(0, Math.round(n));
+  saveLocal();
+  renderCoinBadge();
+}
+function renderCoinBadge() {
+  const el = document.getElementById('coin-display');
+  if (el) el.textContent = getCoins().toLocaleString();
+}
+
+// ── Auth ──────────────────────────────────────────────────────
 function initAuth() {
   const loginBtn = document.getElementById('login-btn');
-  const modal = document.getElementById('login-modal');
+  const modal    = document.getElementById('login-modal');
   const closeBtn = document.getElementById('modal-close');
-  const submitBtn = document.getElementById('login-submit');
-  const input = document.getElementById('username-input');
+  const submitBtn= document.getElementById('login-submit');
+  const input    = document.getElementById('username-input');
 
   if (state.user) applyUser();
 
   loginBtn.addEventListener('click', () => {
     if (state.user) {
-      // logout
-      state.user = null;
-      saveLocal();
+      state.user = null; saveLocal();
       loginBtn.textContent = 'Sign In';
       document.getElementById('username-display').textContent = 'Guest';
+      document.getElementById('coin-display').textContent = '—';
       showToast('Signed out');
     } else {
-      modal.classList.remove('hidden');
-      input.focus();
+      modal.classList.remove('hidden'); input.focus();
     }
   });
 
   closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
-
+  modal.addEventListener('click', e => { if (e.target===modal) modal.classList.add('hidden'); });
   submitBtn.addEventListener('click', doLogin);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  input.addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
 
   function doLogin() {
     const name = input.value.trim();
-    if (!name) return showToast('Please enter a username', 'error');
+    if (!name) return showToast('Enter a username','error');
     state.user = { username: name, joined: Date.now() };
     saveLocal();
-    applyUser();
-    modal.classList.add('hidden');
-    showToast(`Welcome, ${name}! 🏀`, 'success');
-    // Add to leaderboard if not present
-    if (!state.leaderboard.find(u => u.username === name)) {
-      state.leaderboard.push({ username: name, correct: 0, total: 0, streak: 0 });
+    if (!state.leaderboard.find(u => u.username===name)) {
+      state.leaderboard.push({ username:name, correct:0, total:0, streak:0, coins:STARTING_COINS });
       saveLocal();
     }
+    applyUser();
+    modal.classList.add('hidden');
+    showToast(`Welcome, ${name}! You have ${STARTING_COINS.toLocaleString()} coins 🪙`, 'success');
     renderLeaderboard();
   }
 
   function applyUser() {
     document.getElementById('username-display').textContent = state.user.username;
     document.getElementById('login-btn').textContent = 'Sign Out';
+    renderCoinBadge();
   }
 }
 
-// ── Tabs ─────────────────────────────────────────────────────
+// ── Tabs ──────────────────────────────────────────────────────
 function initTabs() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -133,112 +193,112 @@ function initTabs() {
       btn.classList.add('active');
       const tab = btn.dataset.tab;
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.getElementById('tab-' + tab).classList.remove('hidden');
-      if (tab === 'leaderboard') renderLeaderboard();
-      if (tab === 'my-picks') renderMyPicks();
+      document.getElementById('tab-'+tab).classList.remove('hidden');
+      if (tab==='leaderboard') renderLeaderboard();
+      if (tab==='my-picks')    renderMyPicks();
     });
   });
 }
 
-// ── NBA API ───────────────────────────────────────────────────
+// ── Fetch real NBA games from official CDN ───────────────────
 async function fetchTodaysGames() {
-  const date = today();
   try {
-    const res = await fetch(`${API_BASE}/games?dates[]=${date}&per_page=15`);
-    if (!res.ok) throw new Error('API error');
+    // bust cache so we always get today's data
+    const res = await fetch(NBA_SCOREBOARD + '?_=' + Date.now());
+    if (!res.ok) throw new Error('non-200');
     const data = await res.json();
-    return data.data || [];
+    const raw = data?.scoreboard?.games || [];
+    if (!raw.length) return null;
+    return raw.map(normalizeNBAGame);
   } catch (e) {
-    console.warn('NBA API unavailable, using demo data:', e.message);
-    return null; // will trigger demo mode
+    console.warn('NBA CDN unavailable:', e.message);
+    return null;
   }
 }
 
-async function fetchTodaysStats() {
-  const date = today();
-  try {
-    const res = await fetch(`${API_BASE}/stats?dates[]=${date}&per_page=50`);
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    return data.data || [];
-  } catch (e) {
-    console.warn('Stats unavailable');
-    return [];
+// Convert NBA CDN shape → our internal shape
+function normalizeNBAGame(g) {
+  const homeAbbr = g.homeTeam.teamTricode;
+  const awayAbbr = g.awayTeam.teamTricode;
+  // gameStatus: 1=pre-game, 2=live, 3=final
+  const statusNum = g.gameStatus;
+  let statusText = 'scheduled';
+  if (statusNum === 2) statusText = 'live';
+  if (statusNum === 3) statusText = 'final';
+
+  // Convert UTC tip-off to local time string
+  let timeStr = '';
+  if (statusNum === 1 && g.gameTimeUTC) {
+    const d = new Date(g.gameTimeUTC);
+    timeStr = d.toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'});
+  } else if (statusNum === 2) {
+    // e.g. "Q3 4:22"
+    const clock = g.gameClock ? g.gameClock.replace('PT','').replace('M',':').replace('S','').replace(/:\d\d\.\d\d/,m=>m.split('.')[0]) : '';
+    timeStr = `Q${g.period} ${clock}`;
+  } else if (statusNum === 3) {
+    timeStr = 'Final';
   }
+
+  return {
+    id: g.gameId,
+    status: statusText,
+    time: timeStr,
+    period: g.period || 0,
+    gameClock: g.gameClock || '',
+    seriesText: g.seriesText || '',
+    home_team: {
+      full_name: TEAM_FULL[homeAbbr] || g.homeTeam.teamName,
+      abbreviation: homeAbbr,
+    },
+    visitor_team: {
+      full_name: TEAM_FULL[awayAbbr] || g.awayTeam.teamName,
+      abbreviation: awayAbbr,
+    },
+    home_team_score: g.homeTeam.score || 0,
+    visitor_team_score: g.awayTeam.score || 0,
+  };
 }
 
-// ── Demo data (used when no games today or API fails) ──────────
-function getDemoGames() {
-  const teams = [
-    { id: 1, full_name: 'Boston Celtics', abbreviation: 'BOS' },
-    { id: 2, full_name: 'Miami Heat', abbreviation: 'MIA' },
-    { id: 3, full_name: 'Los Angeles Lakers', abbreviation: 'LAL' },
-    { id: 4, full_name: 'Golden State Warriors', abbreviation: 'GSW' },
-    { id: 5, full_name: 'Milwaukee Bucks', abbreviation: 'MIL' },
-    { id: 6, full_name: 'Philadelphia 76ers', abbreviation: 'PHI' },
-    { id: 7, full_name: 'Denver Nuggets', abbreviation: 'DEN' },
-    { id: 8, full_name: 'Phoenix Suns', abbreviation: 'PHX' },
-  ];
-  const pairs = [[0,1],[2,3],[4,5],[6,7]];
-  return pairs.map((p, i) => ({
-    id: 9000 + i,
-    status: 'scheduled',
-    time: ['7:00 PM ET','7:30 PM ET','8:00 PM ET','10:30 PM ET'][i],
-    home_team: teams[p[0]],
-    visitor_team: teams[p[1]],
-    home_team_score: 0,
-    visitor_team_score: 0,
-    _demo: true,
-  }));
-}
-
-function getDemoProps(games) {
-  const playerPool = [
-    { name: 'Jayson Tatum', team: 'BOS', game: 'BOS vs MIA', stat: 'Points', line: 27.5 },
-    { name: 'Jimmy Butler', team: 'MIA', game: 'BOS vs MIA', stat: 'Points', line: 22.5 },
-    { name: 'LeBron James', team: 'LAL', game: 'LAL vs GSW', stat: 'Points', line: 24.5 },
-    { name: 'Stephen Curry', team: 'GSW', game: 'LAL vs GSW', stat: 'Points', line: 28.5 },
-    { name: 'Giannis Antetokounmpo', team: 'MIL', game: 'MIL vs PHI', stat: 'Points', line: 31.5 },
-    { name: 'Joel Embiid', team: 'PHI', game: 'MIL vs PHI', stat: 'Points', line: 29.5 },
-    { name: 'Nikola Jokic', team: 'DEN', game: 'DEN vs PHX', stat: 'Rebounds', line: 12.5 },
-    { name: 'Kevin Durant', team: 'PHX', game: 'DEN vs PHX', stat: 'Points', line: 27.5 },
-    { name: 'Jaylen Brown', team: 'BOS', game: 'BOS vs MIA', stat: 'Assists', line: 3.5 },
-    { name: 'Anthony Davis', team: 'LAL', game: 'LAL vs GSW', stat: 'Rebounds', line: 13.5 },
-    { name: 'Damian Lillard', team: 'MIL', game: 'MIL vs PHI', stat: 'Assists', line: 6.5 },
-    { name: 'Tyrese Maxey', team: 'PHI', game: 'MIL vs PHI', stat: 'Points', line: 23.5 },
-  ];
-  // Use actual games if provided
-  if (games && games.length > 0 && !games[0]._demo) {
-    return buildPropsFromGames(games);
-  }
-  return playerPool.map((p, i) => ({ ...p, id: 'prop_' + i, emoji: PLAYER_EMOJI[i % PLAYER_EMOJI.length] }));
-}
-
+// ── Build props from real game matchups ───────────────────────
 function buildPropsFromGames(games) {
   const props = [];
-  games.forEach((g, i) => {
-    const home = g.home_team.full_name;
-    const away = g.visitor_team.full_name;
-    const matchup = `${g.home_team.abbreviation} vs ${g.visitor_team.abbreviation}`;
-    const stats = [
-      { stat: 'Points', base: 22 },
-      { stat: 'Rebounds', base: 8 },
-      { stat: 'Assists', base: 5 },
-    ];
-    stats.forEach((s, j) => {
-      const line = Math.round(rand(s.base - 3, s.base + 8) * 2) / 2;
-      props.push({
-        id: `prop_${i}_${j}`,
-        name: `Player ${i*2+j+1}`,
-        team: j % 2 === 0 ? g.home_team.abbreviation : g.visitor_team.abbreviation,
-        game: matchup,
-        stat: s.stat,
-        line,
-        emoji: PLAYER_EMOJI[(i * 3 + j) % PLAYER_EMOJI.length],
+  games.forEach((g, gi) => {
+    const teams = [g.home_team.abbreviation, g.visitor_team.abbreviation];
+    const matchup = `${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`;
+    teams.forEach((abbr, ti) => {
+      const stars = TEAM_STARS[abbr] || [];
+      stars.forEach((star, si) => {
+        props.push({
+          id: `prop_${gi}_${ti}_${si}`,
+          name: star.n,
+          team: abbr,
+          game: matchup,
+          stat: star.s,
+          line: star.l,
+          emoji: PLAYER_EMOJI[(gi*4 + ti*2 + si) % PLAYER_EMOJI.length],
+        });
       });
     });
   });
-  return props.slice(0, 12);
+  // Deduplicate by player name (e.g. player traded)
+  const seen = new Set();
+  return props.filter(p => { if (seen.has(p.name)) return false; seen.add(p.name); return true; });
+}
+
+// ── Fallback demo games ───────────────────────────────────────
+function getDemoGames() {
+  const pairs = [
+    ['NYK','ATL'],['CLE','TOR'],['DEN','MIN'],['LAL','GSW'],
+  ];
+  return pairs.map(([away,home], i) => ({
+    id: 'demo_'+i, status:'scheduled',
+    time: ['7:00 PM ET','8:00 PM ET','9:30 PM ET','10:00 PM ET'][i],
+    period:0, gameClock:'', seriesText:'',
+    home_team:{ full_name: TEAM_FULL[home]||home, abbreviation:home },
+    visitor_team:{ full_name: TEAM_FULL[away]||away, abbreviation:away },
+    home_team_score:0, visitor_team_score:0,
+    _demo:true,
+  }));
 }
 
 // ── Render Games ──────────────────────────────────────────────
@@ -247,43 +307,54 @@ function renderGames(games) {
   grid.innerHTML = '';
 
   games.forEach(game => {
-    const homeEmoji = TEAM_EMOJI[game.home_team.full_name] || '🏀';
-    const awayEmoji = TEAM_EMOJI[game.visitor_team.full_name] || '🏀';
-    const isLive = game.status === 'live' || (game.period > 0 && game.time !== 'Final');
-    const isFinal = game.status === 'Final' || game.status === 'final';
-    const homeScore = game.home_team_score || 0;
-    const awayScore = game.visitor_team_score || 0;
+    const he = TEAM_EMOJI[game.home_team.abbreviation] || '🏀';
+    const ae = TEAM_EMOJI[game.visitor_team.abbreviation] || '🏀';
+    const isLive  = game.status === 'live';
+    const isFinal = game.status === 'final';
     const showScores = isLive || isFinal;
-    const gameTime = game._demo ? game.time : (game.status === 'scheduled' ? formatAPITime(game.status, game.time) : game.status);
+    const hs = game.home_team_score;
+    const as = game.visitor_team_score;
+
+    let statusHtml;
+    if (isLive)       statusHtml = `<span class="game-status-live">LIVE · ${game.time}</span>`;
+    else if (isFinal) statusHtml = `<span class="game-status-final">FINAL</span>`;
+    else              statusHtml = `<span class="game-time">${game.time}</span>`;
+
+    const seriesBadge = game.seriesText
+      ? `<span class="series-badge">${game.seriesText}</span>` : '';
 
     const card = document.createElement('div');
     card.className = 'game-card';
     card.innerHTML = `
       <div class="game-card-header">
-        <span>${game.home_team.abbreviation} vs ${game.visitor_team.abbreviation}</span>
-        ${isLive ? '<span class="game-status-live">LIVE</span>' : isFinal ? '<span style="color:var(--text3)">FINAL</span>' : `<span class="game-time">${gameTime}</span>`}
+        <span>${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation} ${seriesBadge}</span>
+        ${statusHtml}
       </div>
       <div class="game-matchup">
         <div class="team-side">
-          <div class="team-logo">${awayEmoji}</div>
+          <div class="team-logo">${ae}</div>
           <div class="team-abbr">${game.visitor_team.abbreviation}</div>
-          <div class="team-score ${showScores ? '' : 'empty'}">${showScores ? awayScore : '—'}</div>
+          <div class="team-name-small">${game.visitor_team.full_name}</div>
+          <div class="team-score ${showScores?'':'empty'}">${showScores ? as : '—'}</div>
         </div>
-        <div class="vs-badge">
-          <span>VS</span>
-        </div>
+        <div class="vs-badge"><span>@</span></div>
         <div class="team-side">
-          <div class="team-logo">${homeEmoji}</div>
+          <div class="team-logo">${he}</div>
           <div class="team-abbr">${game.home_team.abbreviation}</div>
-          <div class="team-score ${showScores ? '' : 'empty'}">${showScores ? homeScore : '—'}</div>
+          <div class="team-name-small">${game.home_team.full_name}</div>
+          <div class="team-score ${showScores?'':'empty'}">${showScores ? hs : '—'}</div>
         </div>
       </div>
       <div class="pick-buttons">
-        <button class="pick-btn" data-game="${game.id}" data-pick="away" data-label="${game.visitor_team.full_name}" data-detail="${game.visitor_team.abbreviation} to win">
-          ${awayEmoji} ${game.visitor_team.abbreviation} Win
+        <button class="pick-btn" data-game="${game.id}" data-pick="away"
+          data-label="${game.visitor_team.full_name}"
+          data-detail="${game.visitor_team.abbreviation} to win">
+          ${ae} ${game.visitor_team.abbreviation} Win
         </button>
-        <button class="pick-btn" data-game="${game.id}" data-pick="home" data-label="${game.home_team.full_name}" data-detail="${game.home_team.abbreviation} to win">
-          ${homeEmoji} ${game.home_team.abbreviation} Win
+        <button class="pick-btn" data-game="${game.id}" data-pick="home"
+          data-label="${game.home_team.full_name}"
+          data-detail="${game.home_team.abbreviation} to win">
+          ${he} ${game.home_team.abbreviation} Win
         </button>
       </div>
     `;
@@ -293,31 +364,22 @@ function renderGames(games) {
       if (state.picks[pickId]) btn.classList.add('selected-win');
 
       btn.addEventListener('click', () => {
-        const oppPick = btn.dataset.pick === 'home' ? 'away' : 'home';
-        const oppId = `game_${game.id}_${oppPick}`;
-
-        // deselect opponent
+        const opp    = btn.dataset.pick === 'home' ? 'away' : 'home';
+        const oppId  = `game_${game.id}_${opp}`;
         if (state.picks[oppId]) {
           delete state.picks[oppId];
-          card.querySelector(`[data-pick="${oppPick}"]`)?.classList.remove('selected-win', 'selected-loss');
+          card.querySelector(`[data-pick="${opp}"]`)?.classList.remove('selected-win','selected-loss');
           removeSlipItem(oppId);
         }
-
         if (state.picks[pickId]) {
           delete state.picks[pickId];
-          btn.classList.remove('selected-win', 'selected-loss');
+          btn.classList.remove('selected-win','selected-loss');
           removeSlipItem(pickId);
         } else {
-          if (Object.keys(state.picks).length >= 6) return showToast('Max 6 picks per entry', 'error');
-          state.picks[pickId] = {
-            id: pickId,
-            label: btn.dataset.label,
-            detail: btn.dataset.detail,
-            pickType: 'win',
-          };
+          if (Object.keys(state.picks).length >= 6) return showToast('Max 6 picks per entry','error');
+          state.picks[pickId] = { id:pickId, label:btn.dataset.label, detail:btn.dataset.detail, pickType:'win' };
           btn.classList.add('selected-win');
           addSlipItem(pickId, state.picks[pickId]);
-          showToast(`${game.visitor_team.abbreviation} or ${game.home_team.abbreviation} added!`);
         }
         updateSlip();
       });
@@ -327,16 +389,10 @@ function renderGames(games) {
   });
 }
 
-function formatAPITime(status, time) {
-  if (!time) return status;
-  return time;
-}
-
 // ── Render Props ──────────────────────────────────────────────
 function renderProps(props) {
   const grid = document.getElementById('props-grid');
   grid.innerHTML = '';
-
   props.forEach(prop => {
     const card = document.createElement('div');
     card.className = 'prop-card';
@@ -354,49 +410,41 @@ function renderProps(props) {
         <span class="prop-stat-unit">${prop.stat.toLowerCase()}</span>
       </div>
       <div class="prop-buttons">
-        <button class="over-btn" data-prop="${prop.id}" data-dir="over">▲ Over ${prop.line}</button>
-        <button class="under-btn" data-prop="${prop.id}" data-dir="under">▼ Under ${prop.line}</button>
+        <button class="over-btn" data-prop="${prop.id}">▲ Over ${prop.line}</button>
+        <button class="under-btn" data-prop="${prop.id}">▼ Under ${prop.line}</button>
       </div>
     `;
-
-    const overBtn = card.querySelector('.over-btn');
+    const overBtn  = card.querySelector('.over-btn');
     const underBtn = card.querySelector('.under-btn');
-    const overId = `prop_over_${prop.id}`;
-    const underId = `prop_under_${prop.id}`;
-
-    if (state.picks[overId]) overBtn.classList.add('selected');
+    const overId   = `prop_over_${prop.id}`;
+    const underId  = `prop_under_${prop.id}`;
+    if (state.picks[overId])  overBtn.classList.add('selected');
     if (state.picks[underId]) underBtn.classList.add('selected');
-
-    overBtn.addEventListener('click', () => toggleProp(overId, underId, overBtn, underBtn, prop, 'over'));
+    overBtn.addEventListener('click',  () => toggleProp(overId, underId, overBtn, underBtn, prop, 'over'));
     underBtn.addEventListener('click', () => toggleProp(underId, overId, underBtn, overBtn, prop, 'under'));
-
     grid.appendChild(card);
   });
 }
 
 function toggleProp(pickId, oppId, btn, oppBtn, prop, dir) {
-  // Remove opponent
   if (state.picks[oppId]) {
     delete state.picks[oppId];
     oppBtn.classList.remove('selected');
     removeSlipItem(oppId);
   }
-
   if (state.picks[pickId]) {
     delete state.picks[pickId];
     btn.classList.remove('selected');
     removeSlipItem(pickId);
   } else {
-    if (Object.keys(state.picks).length >= 6) return showToast('Max 6 picks per entry', 'error');
+    if (Object.keys(state.picks).length >= 6) return showToast('Max 6 picks per entry','error');
     state.picks[pickId] = {
-      id: pickId,
-      label: prop.name,
-      detail: `${dir === 'over' ? 'Over' : 'Under'} ${prop.line} ${prop.stat}`,
-      pickType: dir,
+      id:pickId, label:prop.name,
+      detail:`${dir==='over'?'Over':'Under'} ${prop.line} ${prop.stat}`,
+      pickType:dir,
     };
     btn.classList.add('selected');
     addSlipItem(pickId, state.picks[pickId]);
-    showToast(`${prop.name} ${dir} ${prop.line} added!`);
   }
   updateSlip();
 }
@@ -404,9 +452,7 @@ function toggleProp(pickId, oppId, btn, oppBtn, prop, dir) {
 // ── Entry Slip ────────────────────────────────────────────────
 function addSlipItem(id, pick) {
   const container = document.getElementById('slip-picks');
-  const empty = container.querySelector('.slip-empty');
-  if (empty) empty.remove();
-
+  container.querySelector('.slip-empty')?.remove();
   const item = document.createElement('div');
   item.className = 'slip-item';
   item.id = 'slip_' + id;
@@ -415,7 +461,7 @@ function addSlipItem(id, pick) {
       <div class="slip-item-name">${pick.label}</div>
       <div class="slip-item-detail">${pick.detail}</div>
     </div>
-    <span class="slip-item-pick ${pick.pickType === 'under' ? 'under' : 'over win'}">${pick.pickType.toUpperCase()}</span>
+    <span class="slip-item-pick ${pick.pickType==='under'?'under':'over win'}">${pick.pickType.toUpperCase()}</span>
     <button class="slip-item-remove" data-id="${id}">✕</button>
   `;
   item.querySelector('.slip-item-remove').addEventListener('click', () => removePick(id));
@@ -423,33 +469,27 @@ function addSlipItem(id, pick) {
 }
 
 function removeSlipItem(id) {
-  document.getElementById('slip_' + id)?.remove();
+  document.getElementById('slip_'+id)?.remove();
   const container = document.getElementById('slip-picks');
-  if (!container.querySelector('.slip-item')) {
+  if (!container.querySelector('.slip-item'))
     container.innerHTML = '<p class="slip-empty">Add picks to build your entry</p>';
-  }
 }
 
 function removePick(id) {
   if (!state.picks[id]) return;
-  const pick = state.picks[id];
   delete state.picks[id];
-
-  // Un-highlight the card button
-  const [type] = id.split('_');
-  if (type === 'game') {
-    document.querySelector(`[data-game][data-pick]`)?.classList.remove('selected-win','selected-loss');
+  if (id.startsWith('game_')) {
     document.querySelectorAll('.pick-btn').forEach(b => {
-      if (`game_${b.dataset.game}_${b.dataset.pick}` === id) b.classList.remove('selected-win','selected-loss');
+      if (`game_${b.dataset.game}_${b.dataset.pick}` === id)
+        b.classList.remove('selected-win','selected-loss');
     });
   } else {
-    const dir = id.startsWith('prop_over') ? '.over-btn' : '.under-btn';
-    document.querySelectorAll(dir).forEach(b => {
-      const propId = id.replace('prop_over_','').replace('prop_under_','');
+    const isOver = id.startsWith('prop_over_');
+    const propId = id.replace('prop_over_','').replace('prop_under_','');
+    document.querySelectorAll(isOver ? '.over-btn' : '.under-btn').forEach(b => {
       if (b.dataset.prop === propId) b.classList.remove('selected');
     });
   }
-
   removeSlipItem(id);
   updateSlip();
 }
@@ -458,20 +498,46 @@ function updateSlip() {
   const count = Object.keys(state.picks).length;
   document.getElementById('slip-count').textContent = `${count} / 6`;
   document.getElementById('picks-count').textContent = count;
-  const submitBtn = document.getElementById('slip-submit');
-  submitBtn.disabled = count === 0;
+  document.getElementById('slip-submit').disabled = count === 0;
+
+  // Update payout preview in slip
+  renderSlipPayout(count);
+}
+
+function renderSlipPayout(count) {
+  const el = document.getElementById('slip-payout-row');
+  if (!el) return;
+  if (count === 0) { el.style.display = 'none'; return; }
+  const tier = COIN_TIERS.find(t => t.picks === count) || COIN_TIERS[COIN_TIERS.length-1];
+  const payout = Math.round(state.wager * tier.mult);
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <span>Payout (${count} pick${count>1?'s':''})</span>
+    <span style="color:${tier.color};font-weight:700">🪙 ${payout.toLocaleString()}</span>
+  `;
 }
 
 function initSlip() {
   document.getElementById('clear-slip').addEventListener('click', clearSlip);
   document.getElementById('slip-submit').addEventListener('click', submitEntry);
-  document.getElementById('submit-picks-btn').addEventListener('click', submitEntry);
+
+  // Wager selector
+  WAGER_OPTIONS.forEach(amt => {
+    const btn = document.querySelector(`.wager-btn[data-amt="${amt}"]`);
+    if (!btn) return;
+    if (amt === state.wager) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      state.wager = amt;
+      document.querySelectorAll('.wager-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateSlip();
+    });
+  });
 }
 
 function clearSlip() {
   state.picks = {};
   document.getElementById('slip-picks').innerHTML = '<p class="slip-empty">Add picks to build your entry</p>';
-  // Remove all highlights
   document.querySelectorAll('.pick-btn.selected-win,.pick-btn.selected-loss').forEach(b => b.classList.remove('selected-win','selected-loss'));
   document.querySelectorAll('.over-btn.selected,.under-btn.selected').forEach(b => b.classList.remove('selected'));
   updateSlip();
@@ -480,98 +546,108 @@ function clearSlip() {
 function submitEntry() {
   if (!state.user) {
     document.getElementById('login-modal').classList.remove('hidden');
-    return showToast('Sign in to submit picks!', 'error');
+    return showToast('Sign in to submit picks!','error');
   }
   const count = Object.keys(state.picks).length;
-  if (count === 0) return showToast('Add at least 1 pick', 'error');
+  if (count === 0) return showToast('Add at least 1 pick','error');
+
+  const coins = getCoins();
+  if (coins < state.wager) return showToast(`Not enough coins! You have ${coins}🪙`,'error');
+
+  const tier = COIN_TIERS.find(t => t.picks === count) || COIN_TIERS[COIN_TIERS.length-1];
+  const potentialPayout = Math.round(state.wager * tier.mult);
+
+  // Deduct wager immediately
+  setCoins(coins - state.wager);
 
   const entry = {
     id: Date.now(),
     date: today(),
     username: state.user.username,
-    picks: Object.values(state.picks).map(p => ({ ...p, result: 'pending' })),
+    picks: Object.values(state.picks).map(p => ({...p, result:'pending'})),
     status: 'pending',
     submittedAt: new Date().toLocaleTimeString(),
+    wager: state.wager,
+    potentialPayout,
+    mult: tier.mult,
   };
 
   state.entries.push(entry);
   saveLocal();
   clearSlip();
-  showToast(`Entry submitted with ${count} pick${count > 1 ? 's' : ''}! 🏀`, 'success');
-
-  // Simulate results after 3 seconds (for demo)
-  setTimeout(() => simulateResults(entry.id), 3000);
+  showToast(`Entry submitted! Wagered 🪙${state.wager} · potential 🪙${potentialPayout.toLocaleString()}`, 'success');
+  setTimeout(() => simulateResults(entry.id), 4000);
 }
 
-// ── Simulate Results (demo) ───────────────────────────────────
+// ── Simulate results + award coins ───────────────────────────
 function simulateResults(entryId) {
   const entry = state.entries.find(e => e.id === entryId);
   if (!entry) return;
 
   let correct = 0;
   entry.picks.forEach(pick => {
-    pick.result = Math.random() > 0.45 ? 'correct' : 'wrong';
+    pick.result = Math.random() > 0.42 ? 'correct' : 'wrong';
     if (pick.result === 'correct') correct++;
   });
 
   const allCorrect = correct === entry.picks.length;
-  const majority = correct > entry.picks.length / 2;
-  entry.status = allCorrect ? 'won' : majority ? 'won' : 'lost';
+  entry.status = allCorrect ? 'won' : 'lost';
   entry.correct = correct;
 
-  // Update leaderboard
-  let lb = state.leaderboard.find(u => u.username === entry.username);
-  if (!lb) {
-    lb = { username: entry.username, correct: 0, total: 0, streak: 0 };
-    state.leaderboard.push(lb);
+  if (allCorrect) {
+    setCoins(getCoins() + entry.potentialPayout);
+    showToast(`💰 ALL CORRECT! +🪙${entry.potentialPayout.toLocaleString()} credited!`, 'success');
+  } else if (correct > 0) {
+    showToast(`Results in — ${correct}/${entry.picks.length} correct. Better luck next time!`);
+  } else {
+    showToast(`0/${entry.picks.length} correct. Tough break!`);
   }
+
+  let lb = state.leaderboard.find(u => u.username === entry.username);
+  if (!lb) { lb = {username:entry.username,correct:0,total:0,streak:0,coins:STARTING_COINS}; state.leaderboard.push(lb); }
   lb.correct += correct;
-  lb.total += entry.picks.length;
-  lb.streak = entry.status === 'won' ? (lb.streak || 0) + 1 : 0;
+  lb.total   += entry.picks.length;
+  lb.streak   = allCorrect ? (lb.streak||0)+1 : 0;
 
   saveLocal();
-  showToast(`Results in! ${correct}/${entry.picks.length} correct 🎯`, correct > 0 ? 'success' : '');
   renderLeaderboard();
+  renderMyPicks();
+  renderCoinBadge();
 }
 
 // ── Leaderboard ───────────────────────────────────────────────
 function seedLeaderboard() {
-  const names = ['KingJames23', 'HoopDreams', 'BenchWarmer', 'StatPadder', 'PickMaster', 'NBAGenius', 'CourtVision', 'Analyst_X', 'BallIQ100'];
-  names.forEach((name, i) => {
-    if (!state.leaderboard.find(u => u.username === name)) {
-      const correct = randInt(30, 120);
-      const total = correct + randInt(10, 40);
-      state.leaderboard.push({ username: name, correct, total, streak: randInt(0, 8) });
+  const names = ['KingJames23','HoopDreams','BenchWarmer','StatPadder','PickMaster','NBAGenius','CourtVision','Analyst_X','BallIQ100'];
+  names.forEach(name => {
+    if (!state.leaderboard.find(u => u.username===name)) {
+      const correct = randInt(30,120);
+      const total   = correct + randInt(10,40);
+      const coins   = randInt(800, 8000);
+      state.leaderboard.push({username:name, correct, total, streak:randInt(0,8), coins});
     }
   });
   saveLocal();
 }
 
 function renderLeaderboard() {
-  const sorted = [...state.leaderboard].sort((a, b) => {
-    const accA = a.total > 0 ? a.correct / a.total : 0;
-    const accB = b.total > 0 ? b.correct / b.total : 0;
-    return accB - accA || b.correct - a.correct;
-  });
-
+  const sorted = [...state.leaderboard].sort((a,b) => (b.coins||0) - (a.coins||0));
   const tbody = document.getElementById('leaderboard-body');
   tbody.innerHTML = '';
-
   sorted.forEach((u, i) => {
-    const rank = i + 1;
-    const acc = u.total > 0 ? ((u.correct / u.total) * 100).toFixed(1) : '0.0';
+    const rank = i+1;
+    const acc  = u.total > 0 ? ((u.correct/u.total)*100).toFixed(1) : '0.0';
     const isMe = state.user && u.username === state.user.username;
-    const rankClass = rank === 1 ? 'top1' : rank === 2 ? 'top2' : rank === 3 ? 'top3' : '';
-    const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
-    const streakStr = u.streak > 0 ? `<span class="streak-fire">🔥</span>${u.streak}` : '—';
-
+    const rankIcon = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':rank;
+    const rankClass= rank===1?'top1':rank===2?'top2':rank===3?'top3':'';
+    const streakStr= u.streak>0?`<span class="streak-fire">🔥</span>${u.streak}`:'—';
+    const coins = (u.coins||0).toLocaleString();
     const tr = document.createElement('tr');
-    if (isMe) tr.style.background = 'rgba(124,58,237,0.08)';
+    if (isMe) tr.style.background='rgba(124,58,237,0.08)';
     tr.innerHTML = `
       <td><span class="lb-rank ${rankClass}">${rankIcon}</span></td>
-      <td><span class="lb-username">${u.username}${isMe ? '<span class="lb-me-badge">YOU</span>' : ''}</span></td>
+      <td><span class="lb-username">${u.username}${isMe?'<span class="lb-me-badge">YOU</span>':''}</span></td>
+      <td class="lb-coins">🪙 ${coins}</td>
       <td>${u.correct}</td>
-      <td>${u.total}</td>
       <td class="lb-accuracy">${acc}%</td>
       <td class="lb-streak">${streakStr}</td>
     `;
@@ -583,10 +659,10 @@ function renderLeaderboard() {
 function renderMyPicks() {
   const container = document.getElementById('my-picks-list');
   const myEntries = state.user
-    ? state.entries.filter(e => e.username === state.user.username).reverse()
+    ? state.entries.filter(e => e.username===state.user.username).reverse()
     : [];
 
-  if (myEntries.length === 0) {
+  if (!myEntries.length) {
     container.innerHTML = state.user
       ? '<p class="empty-msg">No entries yet. Make some picks!</p>'
       : '<p class="empty-msg">Sign in to see your picks.</p>';
@@ -595,32 +671,33 @@ function renderMyPicks() {
 
   container.innerHTML = myEntries.map(entry => {
     const picksHtml = entry.picks.map(pick => {
-      const resultClass = pick.result === 'correct' ? 'pick-result-correct' : pick.result === 'wrong' ? 'pick-result-wrong' : 'pick-result-pending';
-      const resultIcon = pick.result === 'correct' ? '✓' : pick.result === 'wrong' ? '✗' : '•';
-      return `
-        <div class="entry-pick-row">
-          <span>${pick.label}</span>
-          <span style="color:var(--text3);font-size:0.8rem">${pick.detail}</span>
-          <span class="${resultClass}">${resultIcon}</span>
-        </div>
-      `;
+      const rc = pick.result==='correct'?'pick-result-correct':pick.result==='wrong'?'pick-result-wrong':'pick-result-pending';
+      const ri = pick.result==='correct'?'✓':pick.result==='wrong'?'✗':'•';
+      return `<div class="entry-pick-row">
+        <span>${pick.label}</span>
+        <span style="color:var(--text3);font-size:0.8rem">${pick.detail}</span>
+        <span class="${rc}">${ri}</span>
+      </div>`;
     }).join('');
 
-    const statusClass = entry.status === 'won' ? 'won' : entry.status === 'lost' ? 'lost' : 'pending';
-    const statusLabel = entry.status === 'won' ? 'Won' : entry.status === 'lost' ? 'Lost' : 'Pending';
+    const sc = entry.status==='won'?'won':entry.status==='lost'?'lost':'pending';
+    const sl = entry.status==='won'?'Won':entry.status==='lost'?'Lost':'Pending';
+    const coinResult = entry.status==='won'
+      ? `<span style="color:var(--green);font-weight:700">+🪙${entry.potentialPayout.toLocaleString()}</span>`
+      : entry.status==='lost'
+      ? `<span style="color:var(--red)">-🪙${entry.wager}</span>`
+      : `<span style="color:var(--yellow)">🪙${entry.wager} wagered</span>`;
 
-    return `
-      <div class="entry-card">
-        <div class="entry-card-header">
-          <div>
-            <strong>Entry #${entry.id.toString().slice(-4)}</strong>
-            <span> · ${entry.date} at ${entry.submittedAt}</span>
-          </div>
-          <span class="entry-status ${statusClass}">${statusLabel}</span>
-        </div>
-        <div class="entry-picks-list">${picksHtml}</div>
+    return `<div class="entry-card">
+      <div class="entry-card-header">
+        <div><strong>Entry #${entry.id.toString().slice(-4)}</strong><span> · ${entry.date} at ${entry.submittedAt}</span></div>
+        <div style="display:flex;align-items:center;gap:10px">${coinResult}<span class="entry-status ${sc}">${sl}</span></div>
       </div>
-    `;
+      <div class="entry-picks-list">${picksHtml}</div>
+      <div style="font-size:0.78rem;color:var(--text3);margin-top:4px">
+        Wager: 🪙${entry.wager} · Potential: 🪙${entry.potentialPayout.toLocaleString()} · ${entry.mult}× multiplier
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -632,31 +709,38 @@ async function init() {
   initSlip();
 
   document.getElementById('today-date').textContent = fmtDate(today());
-
-  // Seed leaderboard with demo users
   if (state.leaderboard.length < 5) seedLeaderboard();
 
   const loadingEl = document.getElementById('loading-state');
   const noGamesEl = document.getElementById('no-games-state');
 
-  // Fetch real games
   let games = await fetchTodaysGames();
   let usingDemo = false;
 
-  if (!games || games.length === 0) {
+  if (!games || !games.length) {
     usingDemo = true;
     games = getDemoGames();
     noGamesEl.classList.remove('hidden');
   }
 
   loadingEl.classList.add('hidden');
-
   state.games = games;
-  state.props = getDemoProps(games);
+  state.props  = buildPropsFromGames(games);
 
   renderGames(games);
   renderProps(state.props);
   renderLeaderboard();
+  updateSlip();
+
+  // Auto-refresh live scores every 30s
+  if (!usingDemo) setInterval(refreshScores, 30000);
+}
+
+async function refreshScores() {
+  const games = await fetchTodaysGames();
+  if (!games || !games.length) return;
+  state.games = games;
+  renderGames(games);
 }
 
 document.addEventListener('DOMContentLoaded', init);
