@@ -666,9 +666,10 @@ async function checkEntryResults(entryId) {
   const gamePickIds = entry.picks
     .filter(p => p.id.startsWith('game_'))
     .map(p => {
-      // id format: game_<gameId>_home|away
-      const parts = p.id.split('_');
-      return { pick: p, gameId: parts[1], side: parts[2] };
+      const withoutPrefix = p.id.replace(/^game_/, '');
+      const side   = withoutPrefix.split('_').pop();
+      const rawId  = withoutPrefix.slice(0, -(side.length + 1));
+      return { pick: p, gameId: rawId.padStart(10, '0'), side };
     });
 
   // Prop picks can't be graded from scoreboard (no live box score) — mark correct
@@ -853,9 +854,11 @@ async function loadTracker(pick, el, entry) {
 
 async function loadGameTracker(pick, el) {
   // pick.id = game_<gameId>_home|away
-  const parts  = pick.id.split('_');
-  const gameId = String(parts[1]).padStart(10, '0');
-  const side   = parts[2];
+  // gameId may itself contain underscores (demo_0), so parse from both ends
+  const withoutPrefix = pick.id.replace(/^game_/, '');
+  const side   = withoutPrefix.split('_').pop();            // last segment
+  const rawId  = withoutPrefix.slice(0, -(side.length + 1)); // everything before last _
+  const gameId = rawId.padStart(10, '0');
 
   // Refresh score from CDN
   let liveGame = state.games.find(g => String(g.id).padStart(10,'0') === gameId) || null;
