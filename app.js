@@ -74,6 +74,7 @@ const COIN_TIERS = [
 ];
 const STARTING_COINS = 1000;
 const WAGER_OPTIONS = [50, 100, 250, 500];
+const STORAGE_VERSION = 2; // bump only when storage schema truly breaks
 
 // ── State ────────────────────────────────────────────────────
 let state = {
@@ -106,26 +107,66 @@ function showToast(msg, type='') {
 }
 
 // ── LocalStorage ─────────────────────────────────────────────
+// Each key is versioned so a schema-breaking deploy can clear old data
+// without wiping a compatible version's data.
 function saveLocal() {
-  localStorage.setItem('hoopp_user', JSON.stringify(state.user));
-  localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
-  localStorage.setItem('hoopp_lb', JSON.stringify(state.leaderboard));
+  try {
+    localStorage.setItem(`hoopp_v${STORAGE_VERSION}_user`,      JSON.stringify(state.user));
+    localStorage.setItem(`hoopp_v${STORAGE_VERSION}_entries`,   JSON.stringify(state.entries));
+    localStorage.setItem(`hoopp_v${STORAGE_VERSION}_lb`,        JSON.stringify(state.leaderboard));
+  } catch(e) { console.warn('saveLocal failed', e); }
 }
+
 function loadLocal() {
-  try { state.user = JSON.parse(localStorage.getItem('hoopp_user')); } catch {}
-  try { state.entries = JSON.parse(localStorage.getItem('hoopp_entries')) || []; } catch {}
-  try { state.leaderboard = JSON.parse(localStorage.getItem('hoopp_lb')) || []; } catch {}
+  // Migrate from v1 keys if present and v2 doesn't exist yet
+  if (!localStorage.getItem(`hoopp_v${STORAGE_VERSION}_lb`) &&
+       localStorage.getItem('hoopp_lb')) {
+    migrateV1toV2();
+  }
+
+  try {
+    const u  = JSON.parse(localStorage.getItem(`hoopp_v${STORAGE_VERSION}_user`));
+    const e  = JSON.parse(localStorage.getItem(`hoopp_v${STORAGE_VERSION}_entries`));
+    const lb = JSON.parse(localStorage.getItem(`hoopp_v${STORAGE_VERSION}_lb`));
+    // Merge into state — never overwrite with null/undefined
+    if (u)  state.user       = u;
+    if (e)  state.entries    = e;
+    if (lb) state.leaderboard = lb;
+  } catch(e) { console.warn('loadLocal failed', e); }
+}
+
+function migrateV1toV2() {
+  try {
+    const u  = JSON.parse(localStorage.getItem('hoopp_user'));
+    const e  = JSON.parse(localStorage.getItem('hoopp_entries'));
+    const lb = JSON.parse(localStorage.getItem('hoopp_lb'));
+    if (u)  localStorage.setItem(`hoopp_v${STORAGE_VERSION}_user`,    JSON.stringify(u));
+    if (e)  localStorage.setItem(`hoopp_v${STORAGE_VERSION}_entries`, JSON.stringify(e));
+    if (lb) localStorage.setItem(`hoopp_v${STORAGE_VERSION}_lb`,      JSON.stringify(lb));
+    console.log('Migrated v1 storage to v2');
+  } catch(e) { console.warn('Migration failed', e); }
 }
 
 // ── Coins ─────────────────────────────────────────────────────
+function getOrCreateLbEntry(username) {
+  let lb = state.leaderboard.find(u => u.username === username);
+  if (!lb) {
+    lb = { username, correct: 0, total: 0, streak: 0, coins: STARTING_COINS };
+    state.leaderboard.push(lb);
+  }
+  // Backfill coins field for entries saved before coins existed
+  if (lb.coins === undefined) lb.coins = STARTING_COINS;
+  return lb;
+}
+
 function getCoins() {
   if (!state.user) return 0;
-  const lb = state.leaderboard.find(u => u.username === state.user.username);
-  return lb ? lb.coins : STARTING_COINS;
+  return getOrCreateLbEntry(state.user.username).coins;
 }
+
 function setCoins(n) {
-  const lb = state.leaderboard.find(u => u.username === state.user.username);
-  if (lb) lb.coins = Math.max(0, Math.round(n));
+  if (!state.user) return;
+  getOrCreateLbEntry(state.user.username).coins = Math.max(0, Math.round(n));
   saveLocal();
   renderCoinBadge();
 }
@@ -166,10 +207,8 @@ function initAuth() {
     if (!name) return showToast('Enter a username','error');
     state.user = { username: name, joined: Date.now() };
     saveLocal();
-    if (!state.leaderboard.find(u => u.username===name)) {
-      state.leaderboard.push({ username:name, correct:0, total:0, streak:0, coins:STARTING_COINS });
-      saveLocal();
-    }
+    getOrCreateLbEntry(name);
+    saveLocal();
     applyUser();
     modal.classList.add('hidden');
     showToast(`Welcome, ${name}! You have ${STARTING_COINS.toLocaleString()} coins 🪙`, 'success');
@@ -662,8 +701,7 @@ async function checkEntryResults(entryId) {
     showToast(`Results in — ${correct}/${gradedTotal} correct. 🪙${entry.wager} lost.`);
   }
 
-  let lb = state.leaderboard.find(u => u.username === entry.username);
-  if (!lb) { lb = {username:entry.username, correct:0, total:0, streak:0, coins:STARTING_COINS}; state.leaderboard.push(lb); }
+  const lb = getOrCreateLbEntry(entry.username);
   lb.correct += correct;
   lb.total   += gradedTotal;
   lb.streak   = allCorrect ? (lb.streak||0)+1 : 0;
