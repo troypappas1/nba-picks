@@ -94,8 +94,6 @@ function today() {
 function fmtDate(str) {
   return new Date(str + 'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 }
-function rand(a,b){return Math.random()*(b-a)+a;}
-function randInt(a,b){return Math.floor(rand(a,b+1));}
 
 function showToast(msg, type='') {
   let t = document.getElementById('toast');
@@ -617,16 +615,7 @@ function simulateResults(entryId) {
 
 // ── Leaderboard ───────────────────────────────────────────────
 function seedLeaderboard() {
-  const names = ['KingJames23','HoopDreams','BenchWarmer','StatPadder','PickMaster','NBAGenius','CourtVision','Analyst_X','BallIQ100'];
-  names.forEach(name => {
-    if (!state.leaderboard.find(u => u.username===name)) {
-      const correct = randInt(30,120);
-      const total   = correct + randInt(10,40);
-      const coins   = randInt(800, 8000);
-      state.leaderboard.push({username:name, correct, total, streak:randInt(0,8), coins});
-    }
-  });
-  saveLocal();
+  // no fake users — leaderboard is real players only
 }
 
 function renderLeaderboard() {
@@ -709,8 +698,6 @@ async function init() {
   initSlip();
 
   document.getElementById('today-date').textContent = fmtDate(today());
-  if (state.leaderboard.length < 5) seedLeaderboard();
-
   const loadingEl = document.getElementById('loading-state');
   const noGamesEl = document.getElementById('no-games-state');
 
