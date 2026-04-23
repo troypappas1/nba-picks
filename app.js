@@ -773,17 +773,9 @@ function renderMyPicks() {
     return;
   }
 
-  container.innerHTML = myEntries.map(entry => {
-    const picksHtml = entry.picks.map(pick => {
-      const rc = pick.result==='correct'?'pick-result-correct':pick.result==='wrong'?'pick-result-wrong':'pick-result-pending';
-      const ri = pick.result==='correct'?'✓':pick.result==='wrong'?'✗':'•';
-      return `<div class="entry-pick-row">
-        <span>${pick.label}</span>
-        <span style="color:var(--text3);font-size:0.8rem">${pick.detail}</span>
-        <span class="${rc}">${ri}</span>
-      </div>`;
-    }).join('');
+  container.innerHTML = '';
 
+  myEntries.forEach(entry => {
     const sc = entry.status==='won'?'won':entry.status==='lost'?'lost':'pending';
     const sl = entry.status==='won'?'Won':entry.status==='lost'?'Lost':'Pending';
     const coinResult = entry.status==='won'
@@ -792,17 +784,239 @@ function renderMyPicks() {
       ? `<span style="color:var(--red)">-🪙${entry.wager}</span>`
       : `<span style="color:var(--yellow)">🪙${entry.wager} wagered</span>`;
 
-    return `<div class="entry-card">
+    const card = document.createElement('div');
+    card.className = 'entry-card';
+    card.innerHTML = `
       <div class="entry-card-header">
         <div><strong>Entry #${entry.id.toString().slice(-4)}</strong><span> · ${entry.date} at ${entry.submittedAt}</span></div>
         <div style="display:flex;align-items:center;gap:10px">${coinResult}<span class="entry-status ${sc}">${sl}</span></div>
       </div>
-      <div class="entry-picks-list">${picksHtml}</div>
+      <div class="entry-picks-list" id="picks-list-${entry.id}"></div>
       <div style="font-size:0.78rem;color:var(--text3);margin-top:4px">
         Wager: 🪙${entry.wager} · Potential: 🪙${entry.potentialPayout.toLocaleString()} · ${entry.mult}× multiplier
       </div>
+    `;
+
+    container.appendChild(card);
+    renderPickRows(entry);
+  });
+}
+
+function renderPickRows(entry) {
+  const list = document.getElementById(`picks-list-${entry.id}`);
+  if (!list) return;
+  list.innerHTML = '';
+
+  entry.picks.forEach((pick, idx) => {
+    const rc = pick.result==='correct'?'pick-result-correct':pick.result==='wrong'?'pick-result-wrong':'pick-result-pending';
+    const ri = pick.result==='correct'?'✓':pick.result==='wrong'?'✗':'•';
+    const isProp = pick.id.startsWith('prop_');
+    const expandId = `tracker-${entry.id}-${idx}`;
+
+    const row = document.createElement('div');
+    row.className = 'entry-pick-row expandable';
+    row.innerHTML = `
+      <div class="pick-row-main">
+        <span class="pick-row-label">${pick.label}</span>
+        <span class="pick-row-detail">${pick.detail}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="pick-row-chevron">▼</span>
+          <span class="${rc}">${ri}</span>
+        </div>
+      </div>
+      <div class="pick-tracker" id="${expandId}" style="display:none"></div>
+    `;
+
+    row.querySelector('.pick-row-main').addEventListener('click', () => {
+      const tracker = document.getElementById(expandId);
+      const chevron = row.querySelector('.pick-row-chevron');
+      const isOpen  = tracker.style.display !== 'none';
+      tracker.style.display = isOpen ? 'none' : 'block';
+      chevron.textContent   = isOpen ? '▼' : '▲';
+      if (!isOpen) loadTracker(pick, tracker, entry);
+    });
+
+    list.appendChild(row);
+  });
+}
+
+// ── Live tracker loader ───────────────────────────────────────
+async function loadTracker(pick, el, entry) {
+  el.innerHTML = '<div class="tracker-loading"><div class="spinner-sm"></div> Loading live data…</div>';
+
+  if (pick.id.startsWith('game_')) {
+    await loadGameTracker(pick, el);
+  } else {
+    await loadPropTracker(pick, el, entry);
+  }
+}
+
+async function loadGameTracker(pick, el) {
+  // pick.id = game_<gameId>_home|away
+  const parts  = pick.id.split('_');
+  const gameId = parts[1];
+  const side   = parts[2];
+
+  const game = state.games.find(g => String(g.id) === String(gameId));
+  if (!game) {
+    el.innerHTML = '<p class="tracker-empty">Game data not available yet.</p>';
+    return;
+  }
+
+  // Refresh score live
+  let liveGame = game;
+  try {
+    const res  = await fetch(NBA_SCOREBOARD + '?_=' + Date.now());
+    const data = await res.json();
+    const found = (data?.scoreboard?.games||[]).map(normalizeNBAGame).find(g => String(g.id)===String(gameId));
+    if (found) liveGame = found;
+  } catch {}
+
+  const hs = liveGame.home_team_score;
+  const as = liveGame.visitor_team_score;
+  const pickedTeam  = side==='home' ? liveGame.home_team : liveGame.visitor_team;
+  const otherTeam   = side==='home' ? liveGame.visitor_team : liveGame.home_team;
+  const pickedScore = side==='home' ? hs : as;
+  const otherScore  = side==='home' ? as : hs;
+  const isWinning   = pickedScore > otherScore;
+  const isTied      = pickedScore === otherScore;
+  const diff        = pickedScore - otherScore;
+  const isFinal     = liveGame.status === 'final';
+  const isLive      = liveGame.status === 'live';
+
+  // Bar: fill based on lead, max visual at 20pt lead
+  const maxLead    = 20;
+  const clampedPct = Math.min(100, Math.max(0, ((pickedScore / Math.max(pickedScore + otherScore, 1)) * 100)));
+  const barColor   = isFinal ? (isWinning?'var(--green)':'var(--red)') : isWinning ? 'var(--green)' : isTied ? 'var(--yellow)' : 'var(--red)';
+  const statusLine = isFinal
+    ? (isWinning ? `✓ ${pickedTeam.abbreviation} won` : `✗ ${pickedTeam.abbreviation} lost`)
+    : isLive
+    ? (isTied ? 'Tied' : isWinning ? `+${diff} lead` : `Down ${Math.abs(diff)}`)
+    : 'Pre-game';
+
+  el.innerHTML = `
+    <div class="tracker-box">
+      <div class="tracker-matchup-row">
+        <span class="tracker-team picked">${TEAM_EMOJI[pickedTeam.abbreviation]||'🏀'} ${pickedTeam.abbreviation} <span class="tracker-score">${pickedScore}</span></span>
+        <span class="tracker-vs">vs</span>
+        <span class="tracker-team other">${TEAM_EMOJI[otherTeam.abbreviation]||'🏀'} ${otherTeam.abbreviation} <span class="tracker-score">${otherScore}</span></span>
+      </div>
+      <div class="tracker-bar-wrap">
+        <div class="tracker-bar-label">
+          <span>${pickedTeam.abbreviation} score share</span>
+          <span class="tracker-status-label" style="color:${barColor}">${statusLine}</span>
+        </div>
+        <div class="tracker-bar-bg">
+          <div class="tracker-bar-fill" style="width:${clampedPct}%;background:${barColor}"></div>
+          <div class="tracker-bar-line" style="left:50%"></div>
+        </div>
+        <div class="tracker-bar-ends"><span>Behind</span><span>Even</span><span>Ahead</span></div>
+      </div>
+      ${isLive ? '<div class="tracker-live-dot">● LIVE</div>' : ''}
+      ${isFinal ? '<div class="tracker-final-tag">FINAL</div>' : ''}
+    </div>
+  `;
+}
+
+async function loadPropTracker(pick, el, entry) {
+  // pick.detail = "Over 24.5 Points" or "Under 6.5 Assists"
+  const detailParts = pick.detail.split(' ');
+  const dir   = detailParts[0].toLowerCase();   // over/under
+  const line  = parseFloat(detailParts[1]);
+  const stat  = detailParts.slice(2).join(' ');  // Points / Rebounds / Assists / Blocks
+
+  // Find which game this player's team is in
+  const playerTeam = findPlayerTeam(pick.label);
+  const game = playerTeam ? state.games.find(g =>
+    g.home_team.abbreviation === playerTeam || g.visitor_team.abbreviation === playerTeam
+  ) : null;
+
+  if (!game) {
+    renderPropTrackerBar(el, pick.label, stat, line, dir, null, 'Game not found');
+    return;
+  }
+
+  // Fetch box score
+  let current = null;
+  try {
+    const url = `https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_${game.id}.json?_=${Date.now()}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    const allPlayers = [
+      ...(data?.game?.homeTeam?.players||[]),
+      ...(data?.game?.awayTeam?.players||[]),
+    ];
+    const playerData = allPlayers.find(p =>
+      p.name?.toLowerCase().includes(pick.label.split(' ').slice(-1)[0].toLowerCase()) ||
+      pick.label.toLowerCase().includes(p.name?.toLowerCase()||'')
+    );
+    if (playerData?.statistics) {
+      const s = playerData.statistics;
+      const statMap = {
+        'points': s.points, 'rebounds': s.reboundsTotal,
+        'assists': s.assists, 'blocks': s.blocks, 'steals': s.steals,
+      };
+      current = statMap[stat.toLowerCase()] ?? null;
+    }
+  } catch {}
+
+  renderPropTrackerBar(el, pick.label, stat, line, dir, current,
+    current === null ? 'Live box score unavailable — check back during/after game' : null);
+}
+
+function renderPropTrackerBar(el, playerName, stat, line, dir, current, note) {
+  if (current === null) {
+    el.innerHTML = `
+      <div class="tracker-box">
+        <div class="tracker-prop-header">
+          <span class="tracker-player-name">${playerName}</span>
+          <span class="tracker-prop-line">${dir==='over'?'▲ Over':'▼ Under'} ${line} ${stat}</span>
+        </div>
+        <p class="tracker-note">${note}</p>
+      </div>`;
+    return;
+  }
+
+  const pct = Math.min(100, (current / (line * 1.5)) * 100);
+  const linePct = (line / (line * 1.5)) * 100;
+  const hitting = dir==='over' ? current >= line : current <= line;
+  const barColor = hitting ? 'var(--green)' : 'var(--red)';
+  const remaining = dir==='over' ? Math.max(0, line - current) : null;
+  const statusLine = dir==='over'
+    ? (current >= line ? `✓ Hit! (${current} pts)` : `Need ${(line-current).toFixed(1)} more`)
+    : (current <= line ? `✓ Tracking under` : `⚠ ${(current-line).toFixed(1)} over line`);
+
+  el.innerHTML = `
+    <div class="tracker-box">
+      <div class="tracker-prop-header">
+        <span class="tracker-player-name">${playerName}</span>
+        <span class="tracker-prop-line">${dir==='over'?'▲ Over':'▼ Under'} ${line} ${stat}</span>
+      </div>
+      <div class="tracker-stat-display">
+        <span class="tracker-current-val" style="color:${barColor}">${current}</span>
+        <span class="tracker-stat-label">${stat.toLowerCase()} so far</span>
+      </div>
+      <div class="tracker-bar-wrap">
+        <div class="tracker-bar-label">
+          <span>0</span>
+          <span class="tracker-status-label" style="color:${barColor}">${statusLine}</span>
+          <span>${(line*1.5).toFixed(0)}</span>
+        </div>
+        <div class="tracker-bar-bg" style="position:relative">
+          <div class="tracker-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+          <div class="tracker-bar-line" style="left:${linePct}%"></div>
+          <div class="tracker-line-label" style="left:${linePct}%">${line}</div>
+        </div>
+      </div>
     </div>`;
-  }).join('');
+}
+
+function findPlayerTeam(playerName) {
+  const lower = playerName.toLowerCase();
+  for (const [abbr, stars] of Object.entries(TEAM_STARS)) {
+    if (stars.some(s => s.n.toLowerCase() === lower)) return abbr;
+  }
+  return null;
 }
 
 // ── Init ──────────────────────────────────────────────────────

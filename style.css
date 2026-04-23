@@ -741,6 +741,153 @@ main {
   font-weight: 700;
 }
 
+/* ===== PICK TRACKER ===== */
+.entry-pick-row.expandable {
+  flex-direction: column;
+  align-items: stretch;
+  cursor: pointer;
+  padding: 0;
+}
+.pick-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  gap: 8px;
+  transition: background 0.15s;
+}
+.pick-row-main:hover { background: rgba(255,255,255,0.04); }
+.pick-row-label  { font-weight: 600; font-size: 0.85rem; flex: 1; }
+.pick-row-detail { color: var(--text3); font-size: 0.78rem; flex: 1; }
+.pick-row-chevron { font-size: 0.6rem; color: var(--text3); transition: transform 0.2s; }
+
+.pick-tracker {
+  padding: 12px 10px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.2);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.tracker-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text3);
+  font-size: 0.82rem;
+  padding: 8px 0;
+}
+.spinner-sm {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.tracker-box { display: flex; flex-direction: column; gap: 10px; }
+.tracker-empty, .tracker-note {
+  font-size: 0.8rem;
+  color: var(--text3);
+  padding: 4px 0;
+  font-style: italic;
+}
+
+/* game tracker */
+.tracker-matchup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tracker-team { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+.tracker-team.picked { color: var(--text); }
+.tracker-team.other  { color: var(--text2); }
+.tracker-score { font-size: 1.1rem; font-weight: 800; }
+.tracker-vs { font-size: 0.72rem; color: var(--text3); }
+
+/* prop tracker */
+.tracker-prop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tracker-player-name { font-weight: 700; font-size: 0.9rem; }
+.tracker-prop-line { font-size: 0.78rem; color: var(--text3); background: var(--surface2); padding: 3px 8px; border-radius: 10px; }
+
+.tracker-stat-display {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.tracker-current-val { font-size: 2rem; font-weight: 900; line-height: 1; }
+.tracker-stat-label  { font-size: 0.78rem; color: var(--text3); }
+
+/* shared bar */
+.tracker-bar-wrap { display: flex; flex-direction: column; gap: 4px; }
+.tracker-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text3);
+}
+.tracker-status-label { font-weight: 700; font-size: 0.78rem; }
+
+.tracker-bar-bg {
+  height: 10px;
+  background: var(--border);
+  border-radius: 20px;
+  overflow: visible;
+  position: relative;
+}
+.tracker-bar-fill {
+  height: 100%;
+  border-radius: 20px;
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+  position: relative;
+  z-index: 1;
+}
+.tracker-bar-line {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 16px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 2px;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+.tracker-line-label {
+  position: absolute;
+  top: 14px;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap;
+}
+.tracker-bar-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text3);
+}
+
+.tracker-live-dot {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--green);
+  animation: pulse 1.2s infinite;
+}
+.tracker-final-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed;
