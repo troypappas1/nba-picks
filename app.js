@@ -199,38 +199,52 @@ function initAuth() {
 
 async function doLoginWithName(rawName, silent=false) {
   const name = rawName.toLowerCase();
-  showToast('Loading account…');
+  if (!silent) showToast('Loading account…');
 
-  // Check Firestore for existing user
-  let userData = await fbGetUser(name);
-  const isNew  = !userData;
+  try {
+    // Check Firestore for existing user
+    let userData = await fbGetUser(name);
+    const isNew  = !userData;
 
-  if (isNew) {
-    userData = { username:name, coins:STARTING_COINS, correct:0, total:0, streak:0, groups:[], createdAt: Date.now() };
-    await fbSetUser(name, userData);
+    if (isNew) {
+      userData = { username:name, coins:STARTING_COINS, correct:0, total:0, streak:0, groups:[], createdAt: Date.now() };
+      await fbSetUser(name, userData);
+    }
+
+    state.user = userData;
+    saveUserLocal();
+    applyUser();
+
+    if (!silent) {
+      showToast(
+        isNew
+          ? `Welcome, ${name}! You have 🪙${STARTING_COINS.toLocaleString()} to start`
+          : `Welcome back, ${name}! 🪙${userData.coins.toLocaleString()}`,
+        'success'
+      );
+    }
+
+    // Load this user's entries from Firestore
+    state.entries = await fbGetUserEntries(name);
+    renderMyPicks();
+    renderGroupsTab();
+
+    // Re-check any pending entries
+    state.entries.filter(e => e.status==='pending').forEach(e => scheduleResultCheck(e.fbId));
+
+  } catch(err) {
+    console.error('Login error:', err);
+    // If Firestore is blocked (rules not set yet), still let them use the app locally
+    if (err.code === 'permission-denied' || err.message?.includes('permission')) {
+      showToast('⚠️ Firebase rules not configured yet — see setup instructions', 'error');
+    } else {
+      // Fall back to local-only mode so UI isn't broken
+      state.user = { username:name, coins:STARTING_COINS, correct:0, total:0, streak:0, groups:[], createdAt:Date.now() };
+      saveUserLocal();
+      applyUser();
+      if (!silent) showToast(`Signed in as ${name} (offline mode)`, 'success');
+    }
   }
-
-  state.user = userData;
-  saveUserLocal();
-  applyUser();
-
-  if (!silent) {
-    modal?.classList.add('hidden');
-    showToast(
-      isNew
-        ? `Welcome, ${name}! You have 🪙${STARTING_COINS.toLocaleString()} to start`
-        : `Welcome back, ${name}! 🪙${userData.coins.toLocaleString()}`,
-      'success'
-    );
-  }
-
-  // Load this user's entries from Firestore
-  state.entries = await fbGetUserEntries(name);
-  renderMyPicks();
-  renderGroupsTab();
-
-  // Re-check any pending entries
-  state.entries.filter(e => e.status==='pending').forEach(e => scheduleResultCheck(e.fbId));
 }
 
 function applyUser() {
@@ -239,13 +253,13 @@ function applyUser() {
   document.getElementById('coin-display').textContent = (state.user.coins||0).toLocaleString();
 }
 
-function getCoins()    { return state.user ? (state.user.coins||0) : 0; }
+function getCoins() { return state.user ? (state.user.coins||0) : 0; }
 async function setCoins(n) {
   if (!state.user) return;
   const val = Math.max(0, Math.round(n));
   state.user.coins = val;
   document.getElementById('coin-display').textContent = val.toLocaleString();
-  await fbUpdateCoins(state.user.username, val);
+  try { await fbUpdateCoins(state.user.username, val); } catch(e) { console.warn('setCoins Firestore error:', e.message); }
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
