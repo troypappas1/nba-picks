@@ -319,19 +319,85 @@ function getDemoGames() {
   return [];
 }
 
-function buildPropsFromGames(games) {
+// ESPN team abbreviation → team ID map
+const ESPN_TEAM_ID = {
+  ATL:1,BOS:2,BKN:17,CHA:30,CHI:4,CLE:5,DAL:6,DEN:7,DET:8,GSW:9,
+  HOU:10,IND:11,LAC:12,LAL:13,MEM:29,MIA:14,MIL:15,MIN:16,NOP:3,
+  NYK:18,OKC:25,ORL:19,PHI:20,PHX:21,POR:22,SAC:23,SAS:24,TOR:28,
+  UTA:26,WAS:27
+};
+
+// Fetch active (non-injured) players for a team from ESPN
+async function fetchActiveRoster(abbr) {
+  const teamId = ESPN_TEAM_ID[abbr];
+  if (!teamId) return null;
+  try {
+    const res  = await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/roster`);
+    const data = await res.json();
+    const athletes = data?.athletes || [];
+    // Filter to active players only (status name "Active", no injury or injury status "Day-To-Day" still ok)
+    return athletes.filter(p => {
+      const statusName = p?.status?.name || '';
+      const injStatus  = (p?.injuries?.[0]?.status || '').toLowerCase();
+      // Exclude Out, Suspended, IR
+      if (['Out','Injured Reserve','Suspended','Did Not Return'].includes(statusName)) return false;
+      if (injStatus === 'out') return false;
+      return true;
+    }).map(p => ({
+      name:     p.displayName || p.fullName,
+      position: p.position?.abbreviation || '',
+    }));
+  } catch { return null; }
+}
+
+// Stat lines by position group
+function getStatLine(position, name) {
+  // Use TEAM_STARS if we have a known line for this player
+  for (const stars of Object.values(TEAM_STARS)) {
+    const match = stars.find(s => s.n.toLowerCase() === name.toLowerCase());
+    if (match) return { stat: match.s, line: match.l };
+  }
+  // Fall back to position-based defaults
+  if (['PG','SG'].includes(position)) return { stat: 'Points', line: 18.5 };
+  if (['SF','PF'].includes(position))  return { stat: 'Points', line: 16.5 };
+  if (position === 'C')               return { stat: 'Rebounds', line: 9.5 };
+  return { stat: 'Points', line: 15.5 };
+}
+
+async function buildPropsFromGames(games) {
   const props = []; const seen = new Set();
-  games.forEach((g,gi) => {
-    [g.home_team.abbreviation, g.visitor_team.abbreviation].forEach((abbr,ti) => {
-      (TEAM_STARS[abbr]||[]).forEach((star,si) => {
-        if (seen.has(star.n)) return; seen.add(star.n);
-        const matchup = `${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`;
-        props.push({ id:`prop_${gi}_${ti}_${si}`, name:star.n, team:abbr,
-          game:matchup, stat:star.s, line:star.l,
-          emoji:PLAYER_EMOJI[(gi*4+ti*2+si)%PLAYER_EMOJI.length] });
+
+  await Promise.all(games.map(async (g, gi) => {
+    const teams = [
+      { abbr: g.home_team.abbreviation, side: 'home' },
+      { abbr: g.visitor_team.abbreviation, side: 'away' },
+    ];
+    const matchup = `${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`;
+
+    await Promise.all(teams.map(async ({ abbr }, ti) => {
+      const roster = await fetchActiveRoster(abbr);
+      // Use active roster if available, fall back to TEAM_STARS
+      const players = roster
+        ? roster.slice(0, 4) // top 4 active players per team
+        : (TEAM_STARS[abbr] || []).map(s => ({ name: s.n, position: 'SF' }));
+
+      players.forEach((player, si) => {
+        if (seen.has(player.name)) return;
+        seen.add(player.name);
+        const { stat, line } = getStatLine(player.position, player.name);
+        props.push({
+          id:    `prop_${gi}_${ti}_${si}`,
+          name:  player.name,
+          team:  abbr,
+          game:  matchup,
+          stat,
+          line,
+          emoji: PLAYER_EMOJI[(gi*4+ti*2+si) % PLAYER_EMOJI.length],
+        });
       });
-    });
-  });
+    }));
+  }));
+
   return props;
 }
 
@@ -990,7 +1056,11 @@ function renderPropTrackerBar(el,playerName,stat,line,dir,current,note,isPreGame
 }
 
 function findPlayerTeam(playerName) {
-  const lower=playerName.toLowerCase();
+  const lower = playerName.toLowerCase();
+  // Check live props first (uses real active roster)
+  const prop = state.props.find(p => p.name.toLowerCase() === lower);
+  if (prop) return prop.team;
+  // Fall back to TEAM_STARS
   for (const [abbr,stars] of Object.entries(TEAM_STARS)) {
     if (stars.some(s=>s.n.toLowerCase()===lower)) return abbr;
   }
@@ -1022,8 +1092,10 @@ async function init() {
   }
 
   state.games=games;
-  state.props=buildPropsFromGames(games);
   renderGames(games);
+  // Load props async — shows spinner then renders when rosters arrive
+  document.getElementById('props-grid').innerHTML='<div class="loading-state" style="padding:40px"><div class="spinner"></div><p>Loading active rosters…</p></div>';
+  state.props = await buildPropsFromGames(games);
   renderProps(state.props);
   updateSlip();
 
