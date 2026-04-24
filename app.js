@@ -302,15 +302,8 @@ function normalizeNBAGame(g) {
 }
 
 function getDemoGames() {
-  const pairs = [['NYK','ATL'],['CLE','TOR'],['DEN','MIN']];
-  return pairs.map(([away,home],i) => ({
-    id:'demo_'+i, status:'scheduled',
-    time:['7:00 PM ET','8:00 PM ET','9:30 PM ET'][i],
-    period:0, seriesText:'',
-    home_team:    {full_name:TEAM_FULL[home]||home, abbreviation:home},
-    visitor_team: {full_name:TEAM_FULL[away]||away, abbreviation:away},
-    home_team_score:0, visitor_team_score:0, _demo:true,
-  }));
+  // Only used when NBA CDN is unreachable — no hardcoded teams
+  return [];
 }
 
 function buildPropsFromGames(games) {
@@ -1008,12 +1001,19 @@ async function init() {
   const noGamesEl=document.getElementById('no-games-state');
 
   let games=await fetchTodaysGames();
-  let usingDemo=false;
-  if (!games||!games.length) { usingDemo=true; games=getDemoGames(); noGamesEl.classList.remove('hidden'); }
+
   loadingEl.classList.add('hidden');
+
+  if (!games||!games.length) {
+    noGamesEl.classList.remove('hidden');
+    games=[];
+  }
+
   state.games=games;
   state.props=buildPropsFromGames(games);
-  renderGames(games); renderProps(state.props); updateSlip();
+  renderGames(games);
+  renderProps(state.props);
+  updateSlip();
 
   // Auth init (may auto-login from saved username)
   initAuth();
@@ -1022,7 +1022,8 @@ async function init() {
   // Global leaderboard live listener
   renderLeaderboard('global');
 
-  if (!usingDemo) setInterval(refreshScores,30000);
+  // Refresh live scores every 30s — NBA CDN always serves today's games automatically
+  setInterval(refreshScores, 30000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
