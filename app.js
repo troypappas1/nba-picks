@@ -55,7 +55,8 @@ async function fbGetUserEntries(username) {
 }
 
 // ── Constants ────────────────────────────────────────────────
-const NBA_SCOREBOARD = 'https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/scoreboard/todaysScoreboard_00.json';
+const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+const NBA_BOXSCORE_BASE = 'https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_';
 const STARTING_COINS = 1000;
 const WAGER_OPTIONS  = [50, 100, 250, 500];
 const COIN_TIERS = [
@@ -266,39 +267,51 @@ function initTabs() {
 // ── NBA CDN ───────────────────────────────────────────────────
 async function fetchTodaysGames() {
   try {
-    const res  = await fetch(NBA_SCOREBOARD+'?_='+Date.now());
+    const res  = await fetch(ESPN_SCOREBOARD + '?_=' + Date.now());
     if (!res.ok) throw new Error('non-200');
     const data = await res.json();
-    const raw  = data?.scoreboard?.games||[];
-    if (!raw.length) return null;
-    return raw.map(normalizeNBAGame);
-  } catch(e) { console.warn('NBA CDN unavailable:',e.message); return null; }
+    const events = data?.events || [];
+    if (!events.length) return null;
+    return events.map(normalizeESPNGame).filter(Boolean);
+  } catch(e) { console.warn('ESPN API unavailable:', e.message); return null; }
 }
 
-function normalizeNBAGame(g) {
-  const homeAbbr = g.homeTeam.teamTricode;
-  const awayAbbr = g.awayTeam.teamTricode;
-  const statusNum = g.gameStatus;
-  let statusText = statusNum===2?'live':statusNum===3?'final':'scheduled';
-  let timeStr = '';
-  if (statusNum===1 && g.gameTimeUTC) {
-    timeStr = new Date(g.gameTimeUTC).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-  } else if (statusNum===2) {
-    const raw = (g.gameClock||'').replace('PT','').replace('M',':').replace('S','');
-    const parts = raw.split(':');
-    timeStr = parts.length>=2 ? `Q${g.period} ${parts[0]}:${parts[1].split('.')[0].padStart(2,'0')}` : `Q${g.period}`;
-  } else if (statusNum===3) {
-    timeStr = 'Final';
-  }
-  return {
-    id: String(g.gameId).padStart(10,'0'),
-    status: statusText, time: timeStr, period: g.period||0,
-    seriesText: g.seriesText||'',
-    home_team:    { full_name:TEAM_FULL[homeAbbr]||g.homeTeam.teamName, abbreviation:homeAbbr },
-    visitor_team: { full_name:TEAM_FULL[awayAbbr]||g.awayTeam.teamName, abbreviation:awayAbbr },
-    home_team_score:    g.homeTeam.score||0,
-    visitor_team_score: g.awayTeam.score||0,
-  };
+function normalizeESPNGame(event) {
+  try {
+    const comp = event.competitions[0];
+    const home = comp.competitors.find(c => c.homeAway === 'home');
+    const away = comp.competitors.find(c => c.homeAway === 'away');
+    if (!home || !away) return null;
+
+    const homeAbbr = home.team.abbreviation;
+    const awayAbbr = away.team.abbreviation;
+    const state    = event.status.type.state; // 'pre', 'in', 'post'
+    const statusText = state === 'in' ? 'live' : state === 'post' ? 'final' : 'scheduled';
+
+    let timeStr = '';
+    if (state === 'pre') {
+      timeStr = new Date(event.date).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZoneName:'short'});
+    } else if (state === 'in') {
+      timeStr = `Q${event.status.period} ${event.status.displayClock}`;
+    } else {
+      timeStr = 'Final';
+    }
+
+    const seriesText = comp.series?.summary || '';
+
+    return {
+      id:               event.id,
+      espnId:           event.id,
+      status:           statusText,
+      time:             timeStr,
+      period:           event.status.period || 0,
+      seriesText,
+      home_team:        { full_name: home.team.displayName, abbreviation: homeAbbr },
+      visitor_team:     { full_name: away.team.displayName, abbreviation: awayAbbr },
+      home_team_score:  parseInt(home.score) || 0,
+      visitor_team_score: parseInt(away.score) || 0,
+    };
+  } catch(e) { console.warn('normalizeESPNGame error:', e); return null; }
 }
 
 function getDemoGames() {
@@ -559,14 +572,14 @@ async function checkEntryResults(fbEntryId) {
 
   let games;
   try {
-    const res=await fetch(NBA_SCOREBOARD+'?_='+Date.now());
+    const res=await fetch(ESPN_SCOREBOARD+'?_='+Date.now());
     if (!res.ok) throw new Error();
     const data=await res.json();
-    games=(data?.scoreboard?.games||[]).map(normalizeNBAGame);
+    games=(data?.events||[]).map(normalizeESPNGame).filter(Boolean);
   } catch { setTimeout(()=>checkEntryResults(fbEntryId),60000); return; }
 
   const gameMap={};
-  games.forEach(g=>{ gameMap[String(g.id).padStart(10,'0')]=g; });
+  games.forEach(g=>{ gameMap[String(g.id)]=g; });
 
   const gamePickIds=entry.picks
     .filter(p=>p.id.startsWith('game_'))
@@ -574,7 +587,7 @@ async function checkEntryResults(fbEntryId) {
       const withoutPrefix=p.id.replace(/^game_/,'');
       const side=withoutPrefix.split('_').pop();
       const rawId=withoutPrefix.slice(0,-(side.length+1));
-      return { pick:p, gameId:rawId.padStart(10,'0'), side };
+      return { pick:p, gameId:rawId, side };
     });
 
   // If no game picks, can't grade — keep pending
@@ -861,14 +874,13 @@ async function loadTracker(pick,el,entry) {
 async function loadGameTracker(pick,el) {
   const withoutPrefix=pick.id.replace(/^game_/,'');
   const side=withoutPrefix.split('_').pop();
-  const rawId=withoutPrefix.slice(0,-(side.length+1));
-  const gameId=rawId.padStart(10,'0');
+  const gameId=withoutPrefix.slice(0,-(side.length+1));
 
-  let liveGame=state.games.find(g=>String(g.id).padStart(10,'0')===gameId)||null;
+  let liveGame=state.games.find(g=>String(g.id)===String(gameId))||null;
   try {
-    const res=await fetch(NBA_SCOREBOARD+'?_='+Date.now());
+    const res=await fetch(ESPN_SCOREBOARD+'?_='+Date.now());
     const data=await res.json();
-    const found=(data?.scoreboard?.games||[]).map(normalizeNBAGame).find(g=>String(g.id).padStart(10,'0')===gameId);
+    const found=(data?.events||[]).map(normalizeESPNGame).filter(Boolean).find(g=>String(g.id)===String(gameId));
     if (found) liveGame=found;
   } catch {}
 
