@@ -87,37 +87,196 @@ const TEAM_FULL = {
   POR:'Portland Trail Blazers',SAC:'Sacramento Kings',SAS:'San Antonio Spurs',
   TOR:'Toronto Raptors',UTA:'Utah Jazz',WAS:'Washington Wizards'
 };
+// 2024-25 season averages — lines set at season avg ±0.5 (sportsbook style)
+// Injured players removed: Embiid (OUT), Doncic (OUT hamstring), Wembanyama (GTD)
 const TEAM_STARS = {
-  ATL:[{n:'Trae Young',s:'Points',l:26.5},{n:'Dejounte Murray',s:'Assists',l:5.5}],
-  BOS:[{n:'Jayson Tatum',s:'Points',l:27.5},{n:'Jaylen Brown',s:'Points',l:23.5}],
-  BKN:[{n:'Cam Thomas',s:'Points',l:22.5},{n:'Ben Simmons',s:'Rebounds',l:7.5}],
-  CHA:[{n:'LaMelo Ball',s:'Assists',l:7.5},{n:'Miles Bridges',s:'Points',l:18.5}],
-  CHI:[{n:'Zach LaVine',s:'Points',l:22.5},{n:'Nikola Vucevic',s:'Rebounds',l:10.5}],
-  CLE:[{n:'Donovan Mitchell',s:'Points',l:25.5},{n:'Darius Garland',s:'Assists',l:6.5}],
-  DAL:[{n:'Luka Doncic',s:'Points',l:30.5},{n:'Kyrie Irving',s:'Points',l:23.5}],
-  DEN:[{n:'Nikola Jokic',s:'Rebounds',l:12.5},{n:'Jamal Murray',s:'Points',l:21.5}],
-  DET:[{n:'Cade Cunningham',s:'Points',l:22.5},{n:'Jalen Duren',s:'Rebounds',l:10.5}],
-  GSW:[{n:'Stephen Curry',s:'Points',l:28.5},{n:'Klay Thompson',s:'Points',l:17.5}],
-  HOU:[{n:'Alperen Sengun',s:'Rebounds',l:9.5},{n:'Jalen Green',s:'Points',l:22.5}],
-  IND:[{n:'Tyrese Haliburton',s:'Assists',l:10.5},{n:'Pascal Siakam',s:'Points',l:21.5}],
-  LAC:[{n:'Kawhi Leonard',s:'Points',l:22.5},{n:'Paul George',s:'Points',l:22.5}],
-  LAL:[{n:'LeBron James',s:'Points',l:24.5},{n:'Anthony Davis',s:'Rebounds',l:13.5}],
-  MEM:[{n:'Ja Morant',s:'Points',l:24.5},{n:'Jaren Jackson Jr.',s:'Blocks',l:2.5}],
-  MIA:[{n:'Jimmy Butler',s:'Points',l:21.5},{n:'Bam Adebayo',s:'Rebounds',l:10.5}],
-  MIL:[{n:'Giannis Antetokounmpo',s:'Points',l:31.5},{n:'Damian Lillard',s:'Assists',l:6.5}],
-  MIN:[{n:'Anthony Edwards',s:'Points',l:25.5},{n:'Rudy Gobert',s:'Rebounds',l:12.5}],
-  NOP:[{n:'Zion Williamson',s:'Points',l:24.5},{n:'Brandon Ingram',s:'Points',l:21.5}],
-  NYK:[{n:'Jalen Brunson',s:'Points',l:24.5},{n:'Julius Randle',s:'Rebounds',l:9.5}],
-  OKC:[{n:'Shai Gilgeous-Alexander',s:'Points',l:30.5},{n:'Jalen Williams',s:'Points',l:21.5}],
-  ORL:[{n:'Paolo Banchero',s:'Points',l:22.5},{n:'Franz Wagner',s:'Points',l:19.5}],
-  PHI:[{n:'Joel Embiid',s:'Points',l:29.5},{n:'Tyrese Maxey',s:'Points',l:23.5}],
-  PHX:[{n:'Kevin Durant',s:'Points',l:27.5},{n:'Devin Booker',s:'Points',l:26.5}],
-  POR:[{n:'Damian Lillard',s:'Points',l:27.5},{n:'Jerami Grant',s:'Points',l:19.5}],
-  SAC:[{n:"De'Aaron Fox",s:'Points',l:23.5},{n:'Domantas Sabonis',s:'Rebounds',l:12.5}],
-  SAS:[{n:'Victor Wembanyama',s:'Points',l:22.5},{n:'Devin Vassell',s:'Points',l:17.5}],
-  TOR:[{n:'Scottie Barnes',s:'Points',l:19.5},{n:'RJ Barrett',s:'Points',l:19.5}],
-  UTA:[{n:'Lauri Markkanen',s:'Points',l:22.5},{n:'Collin Sexton',s:'Points',l:18.5}],
-  WAS:[{n:'Kyle Kuzma',s:'Points',l:20.5},{n:'Bradley Beal',s:'Points',l:21.5}],
+  ATL:[
+    {n:'Trae Young',       s:'Points',   l:23.5},  // 23.6 PPG
+    {n:'Trae Young',       s:'Assists',  l:10.5},  // 11.4 APG
+    {n:'Dyson Daniels',    s:'Points',   l:13.5},  // 14.0 PPG
+    {n:'Onyeka Okongwu',   s:'Rebounds', l:8.5},   // 8.9 RPG
+  ],
+  BOS:[
+    {n:'Jayson Tatum',     s:'Points',   l:27.5},  // 28.0 PPG
+    {n:'Jaylen Brown',     s:'Points',   l:22.5},  // 22.8 PPG
+    {n:'Jayson Tatum',     s:'Rebounds', l:8.5},   // 8.6 RPG
+    {n:'Derrick White',    s:'Points',   l:14.5},  // 14.9 PPG
+  ],
+  BKN:[
+    {n:'Cam Thomas',       s:'Points',   l:22.5},  // 23.1 PPG
+    {n:'Nic Claxton',      s:'Rebounds', l:8.5},   // 9.0 RPG
+    {n:'Ziaire Williams',  s:'Points',   l:13.5},
+  ],
+  CHA:[
+    {n:'LaMelo Ball',      s:'Points',   l:29.5},  // 30.3 PPG (when healthy)
+    {n:'LaMelo Ball',      s:'Assists',  l:5.5},   // 5.8 APG
+    {n:'Brandon Miller',   s:'Points',   l:17.5},  // 18.1 PPG
+  ],
+  CHI:[
+    {n:'Zach LaVine',      s:'Points',   l:23.5},  // 24.1 PPG
+    {n:'Nikola Vucevic',   s:'Rebounds', l:11.5},  // 11.9 RPG
+    {n:'Coby White',       s:'Points',   l:18.5},  // 19.3 PPG
+    {n:'Josh Giddey',      s:'Assists',  l:5.5},
+  ],
+  CLE:[
+    {n:'Donovan Mitchell', s:'Points',   l:25.5},  // 25.9 PPG
+    {n:'Darius Garland',   s:'Assists',  l:6.5},   // 6.8 APG
+    {n:'Evan Mobley',      s:'Rebounds', l:8.5},   // 8.9 RPG
+    {n:'Jarrett Allen',    s:'Rebounds', l:9.5},   // 10.1 RPG
+  ],
+  DAL:[
+    // Luka Doncic OUT (hamstring) — removed from props
+    {n:'Kyrie Irving',     s:'Points',   l:23.5},  // 23.6 PPG
+    {n:'Klay Thompson',    s:'Points',   l:14.5},  // 14.5 PPG
+    {n:'P.J. Washington',  s:'Points',   l:13.5},
+  ],
+  DEN:[
+    {n:'Nikola Jokic',     s:'Points',   l:29.5},  // 29.9 PPG
+    {n:'Nikola Jokic',     s:'Rebounds', l:12.5},  // 12.7 RPG
+    {n:'Nikola Jokic',     s:'Assists',  l:9.5},   // 10.2 APG
+    {n:'Jamal Murray',     s:'Points',   l:18.5},  // 19.1 PPG
+  ],
+  DET:[
+    {n:'Cade Cunningham',  s:'Points',   l:25.5},  // 26.1 PPG
+    {n:'Cade Cunningham',  s:'Assists',  l:8.5},   // 9.0 APG
+    {n:'Jalen Duren',      s:'Rebounds', l:11.5},  // 11.6 RPG
+    {n:'Ausar Thompson',   s:'Points',   l:13.5},
+  ],
+  GSW:[
+    {n:'Stephen Curry',    s:'Points',   l:24.5},  // 24.9 PPG
+    {n:'Stephen Curry',    s:'Assists',  l:5.5},   // 5.8 APG
+    {n:'Buddy Hield',      s:'Points',   l:14.5},
+    {n:'Jonathan Kuminga', s:'Points',   l:16.5},
+  ],
+  HOU:[
+    {n:'Alperen Sengun',   s:'Points',   l:21.5},  // 22.1 PPG
+    {n:'Alperen Sengun',   s:'Rebounds', l:8.5},   // 8.9 RPG
+    {n:'Jalen Green',      s:'Points',   l:20.5},  // 20.7 PPG
+    {n:'Amen Thompson',    s:'Rebounds', l:7.5},
+    {n:'Fred VanVleet',    s:'Assists',  l:6.5},
+  ],
+  IND:[
+    {n:'Tyrese Haliburton', s:'Points',  l:18.5},  // 19.0 PPG
+    {n:'Tyrese Haliburton', s:'Assists', l:9.5},   // 9.9 APG
+    {n:'Pascal Siakam',    s:'Points',   l:20.5},  // 20.8 PPG
+    {n:'Myles Turner',     s:'Blocks',   l:2.5},   // 2.6 BPG
+  ],
+  LAC:[
+    {n:'James Harden',     s:'Points',   l:19.5},  // 20.0 PPG
+    {n:'James Harden',     s:'Assists',  l:8.5},   // 8.6 APG
+    {n:'Ivica Zubac',      s:'Rebounds', l:11.5},  // 11.7 RPG
+    {n:'Norman Powell',    s:'Points',   l:22.5},  // 23.1 PPG
+  ],
+  LAL:[
+    {n:'LeBron James',     s:'Points',   l:23.5},  // 23.7 PPG
+    {n:'Anthony Davis',    s:'Points',   l:25.5},  // 25.7 PPG
+    {n:'Anthony Davis',    s:'Rebounds', l:11.5},  // 11.7 RPG
+    {n:'Austin Reaves',    s:'Points',   l:18.5},  // 19.0 PPG
+  ],
+  MEM:[
+    {n:'Ja Morant',        s:'Points',   l:22.5},  // 22.8 PPG
+    {n:'Ja Morant',        s:'Assists',  l:7.5},   // 8.0 APG
+    {n:'Jaren Jackson Jr.',s:'Points',   l:21.5},  // 21.6 PPG
+    {n:'Jaren Jackson Jr.',s:'Blocks',   l:2.5},   // 2.7 BPG
+    {n:'Desmond Bane',     s:'Points',   l:19.5},
+  ],
+  MIA:[
+    {n:'Tyler Herro',      s:'Points',   l:23.5},  // 23.9 PPG
+    {n:'Bam Adebayo',      s:'Points',   l:17.5},
+    {n:'Bam Adebayo',      s:'Rebounds', l:9.5},   // 10.1 RPG
+    {n:'Nikola Jovic',     s:'Points',   l:11.5},
+  ],
+  MIL:[
+    {n:'Giannis Antetokounmpo', s:'Points',   l:30.5},  // 30.4 PPG
+    {n:'Giannis Antetokounmpo', s:'Rebounds', l:11.5},  // 11.7 RPG
+    {n:'Damian Lillard',   s:'Points',   l:24.5},  // 24.9 PPG
+    {n:'Damian Lillard',   s:'Assists',  l:4.5},
+  ],
+  MIN:[
+    {n:'Anthony Edwards',  s:'Points',   l:25.5},  // 25.8 PPG
+    {n:'Julius Randle',    s:'Points',   l:23.5},  // 24.1 PPG (traded to MIN)
+    {n:'Julius Randle',    s:'Rebounds', l:9.5},
+    {n:'Rudy Gobert',      s:'Rebounds', l:12.5},  // 12.3 RPG
+  ],
+  NOP:[
+    {n:'Zion Williamson',  s:'Points',   l:24.5},  // 24.9 PPG (when healthy)
+    {n:'CJ McCollum',      s:'Points',   l:18.5},
+    {n:'Brandon Ingram',   s:'Points',   l:22.5},  // traded — verify availability
+  ],
+  NYK:[
+    {n:'Jalen Brunson',    s:'Points',   l:27.5},  // 28.3 PPG
+    {n:'Jalen Brunson',    s:'Assists',  l:6.5},   // 6.6 APG
+    {n:'Karl-Anthony Towns', s:'Points', l:24.5},  // 25.1 PPG
+    {n:'Karl-Anthony Towns', s:'Rebounds', l:12.5},// 13.0 RPG
+    {n:'OG Anunoby',       s:'Points',   l:15.5},
+    {n:'Mikal Bridges',    s:'Points',   l:18.5},  // 19.0 PPG
+  ],
+  OKC:[
+    {n:'Shai Gilgeous-Alexander', s:'Points',  l:31.5},  // 32.0 PPG
+    {n:'Shai Gilgeous-Alexander', s:'Assists', l:5.5},
+    {n:'Jalen Williams',   s:'Points',   l:22.5},  // 22.8 PPG
+    {n:'Chet Holmgren',    s:'Rebounds', l:7.5},
+  ],
+  ORL:[
+    {n:'Paolo Banchero',   s:'Points',   l:24.5},  // 25.0 PPG
+    {n:'Paolo Banchero',   s:'Rebounds', l:7.5},
+    {n:'Franz Wagner',     s:'Points',   l:24.5},  // 25.0 PPG
+    {n:'Wendell Carter Jr.',s:'Rebounds',l:9.5},
+  ],
+  PHI:[
+    // Joel Embiid OUT — removed from props
+    {n:'Tyrese Maxey',     s:'Points',   l:27.5},  // 28.3 PPG
+    {n:'Tyrese Maxey',     s:'Assists',  l:6.5},   // 6.6 APG
+    {n:'Paul George',      s:'Points',   l:17.5},  // 17.8 PPG
+    {n:'Kelly Oubre Jr.',  s:'Points',   l:13.5},
+  ],
+  PHX:[
+    {n:'Kevin Durant',     s:'Points',   l:25.5},  // 26.0 PPG
+    {n:'Kevin Durant',     s:'Rebounds', l:5.5},   // 5.5 RPG
+    {n:'Devin Booker',     s:'Points',   l:25.5},  // 25.7 PPG
+    {n:'Bradley Beal',     s:'Points',   l:13.5},
+  ],
+  POR:[
+    {n:'Deni Avdija',      s:'Points',   l:23.5},  // 24.2 PPG
+    {n:'Deni Avdija',      s:'Assists',  l:6.5},   // 6.7 APG
+    {n:'Anfernee Simons',  s:'Points',   l:20.5},
+    {n:'Donovan Clingan',  s:'Rebounds', l:11.5},  // 11.6 RPG
+    {n:'Shaedon Sharpe',   s:'Points',   l:16.5},
+    {n:'Toumani Camara',   s:'Rebounds', l:7.5},
+  ],
+  SAC:[
+    {n:"De'Aaron Fox",     s:'Points',   l:25.5},  // 26.1 PPG
+    {n:"De'Aaron Fox",     s:'Assists',  l:5.5},
+    {n:'Domantas Sabonis', s:'Rebounds', l:13.5},  // 13.9 RPG
+    {n:'Domantas Sabonis', s:'Assists',  l:7.5},   // 7.9 APG
+    {n:'Zach LaVine',      s:'Points',   l:22.5},  // traded to SAC
+  ],
+  SAS:[
+    // Wembanyama GTD — include but could be scratched
+    {n:'Victor Wembanyama',s:'Points',   l:24.5},  // 25.0 PPG
+    {n:'Victor Wembanyama',s:'Rebounds', l:10.5},  // 10.7 RPG
+    {n:'Victor Wembanyama',s:'Blocks',   l:3.5},   // 3.6 BPG
+    {n:'Stephon Castle',   s:'Points',   l:14.5},
+    {n:'Stephon Castle',   s:'Assists',  l:6.5},   // 7.4 APG
+    {n:'Harrison Barnes',  s:'Points',   l:13.5},
+  ],
+  TOR:[
+    {n:'Scottie Barnes',   s:'Points',   l:19.5},
+    {n:'Immanuel Quickley',s:'Points',   l:18.5},
+    {n:'RJ Barrett',       s:'Points',   l:18.5},  // traded — may not be on TOR
+    {n:'Jakob Poeltl',     s:'Rebounds', l:8.5},
+  ],
+  UTA:[
+    {n:'Lauri Markkanen',  s:'Points',   l:23.5},  // 24.0 PPG
+    {n:'Collin Sexton',    s:'Points',   l:18.5},
+    {n:'Jordan Clarkson',  s:'Points',   l:14.5},
+  ],
+  WAS:[
+    {n:'Jordan Poole',     s:'Points',   l:17.5},
+    {n:'Kyle Kuzma',       s:'Points',   l:15.5},
+    {n:'Alexandre Sarr',   s:'Points',   l:12.5},
+    {n:'Alexandre Sarr',   s:'Rebounds', l:6.5},
+  ],
 };
 const PLAYER_EMOJI = ['🏀','⚡','🔥','💪','🎯','👑','🦁','🐉','⭐','🚀','🎪','🏆'];
 
@@ -365,11 +524,14 @@ async function fetchActiveRoster(abbr) {
 }
 
 // Stat lines by position group
-function getStatLine(position, name) {
-  // Use TEAM_STARS if we have a known line for this player
+function getStatLine(position, name, usedStats) {
+  // usedStats: Set of "name|stat" already picked for this player (avoid duplicates)
   for (const stars of Object.values(TEAM_STARS)) {
-    const match = stars.find(s => s.n.toLowerCase() === name.toLowerCase());
-    if (match) return { stat: match.s, line: match.l };
+    const matches = stars.filter(s => s.n.toLowerCase() === name.toLowerCase());
+    for (const match of matches) {
+      const key = `${name.toLowerCase()}|${match.s}`;
+      if (!usedStats || !usedStats.has(key)) return { stat: match.s, line: match.l };
+    }
   }
   // Fall back to position-based defaults
   if (['PG','SG'].includes(position)) return { stat: 'Points', line: 18.5 };
@@ -379,7 +541,9 @@ function getStatLine(position, name) {
 }
 
 async function buildPropsFromGames(games) {
-  const props = []; const seen = new Set();
+  const props = [];
+  const seenPlayer = new Set(); // player already has a prop card
+  const usedStats  = new Set(); // "name|stat" combos already used
 
   await Promise.all(games.map(async (g, gi) => {
     const teams = [
@@ -390,15 +554,24 @@ async function buildPropsFromGames(games) {
 
     await Promise.all(teams.map(async ({ abbr }, ti) => {
       const roster = await fetchActiveRoster(abbr);
-      // Use active roster if available, fall back to TEAM_STARS
-      const players = roster
-        ? roster.slice(0, 4) // top 4 active players per team
-        : (TEAM_STARS[abbr] || []).map(s => ({ name: s.n, position: 'SF' }));
+      const starNames = (TEAM_STARS[abbr] || []).map(s => s.n);
+
+      // Build candidate list: TEAM_STARS players first (by order in roster), then fill with roster
+      let players = [];
+      if (roster) {
+        // Put star players first (preserving roster position data), then others
+        const starPlayers = roster.filter(p => starNames.some(n => n.toLowerCase() === p.name.toLowerCase()));
+        const otherPlayers = roster.filter(p => !starNames.some(n => n.toLowerCase() === p.name.toLowerCase()));
+        players = [...starPlayers, ...otherPlayers].slice(0, 5);
+      } else {
+        players = (TEAM_STARS[abbr] || []).map(s => ({ name: s.n, position: 'SF' })).slice(0, 5);
+      }
 
       players.forEach((player, si) => {
-        if (seen.has(player.name)) return;
-        seen.add(player.name);
-        const { stat, line } = getStatLine(player.position, player.name);
+        if (seenPlayer.has(player.name.toLowerCase())) return;
+        const { stat, line } = getStatLine(player.position, player.name, usedStats);
+        seenPlayer.add(player.name.toLowerCase());
+        usedStats.add(`${player.name.toLowerCase()}|${stat}`);
         props.push({
           id:    `prop_${gi}_${ti}_${si}`,
           name:  player.name,
