@@ -19,6 +19,7 @@
       <button class="nav-btn active" data-tab="picks">Make Picks</button>
       <button class="nav-btn" data-tab="leaderboard">Leaderboard</button>
       <button class="nav-btn" data-tab="my-picks">My Picks</button>
+      <button class="nav-btn" data-tab="groups">Groups</button>
     </div>
     <div class="nav-right">
       <div class="coin-badge">
@@ -34,7 +35,7 @@
   </nav>
 
   <!-- LOGIN MODAL -->
-  <div class="modal-overlay" id="login-modal">
+  <div class="modal-overlay hidden" id="login-modal">
     <div class="modal">
       <button class="modal-close" id="modal-close">✕</button>
       <h2>Join HoopPicks</h2>
@@ -55,44 +56,35 @@
       </div>
       <div class="picks-count-badge">
         <span id="picks-count">0</span> picks selected
-        <button class="btn-submit-picks" id="submit-picks-btn" disabled>Submit Entry</button>
       </div>
     </div>
 
-    <!-- TABS -->
+    <!-- MAKE PICKS TAB -->
     <div class="tab-content" id="tab-picks">
 
-      <!-- LOADING STATE -->
       <div class="loading-state" id="loading-state">
         <div class="spinner"></div>
         <p>Loading today's NBA games...</p>
       </div>
 
-      <!-- NO GAMES STATE -->
       <div class="no-games-state hidden" id="no-games-state">
         <div class="no-games-icon">🏀</div>
         <h3>No Games Scheduled Today</h3>
         <p>Showing demo matchups so you can still practice. Real games load automatically on game days.</p>
       </div>
 
-      <!-- SECTION: GAME PICKS (moneyline) -->
       <section class="picks-section" id="games-section">
         <div class="section-header">
           <h2>Game Results <span class="badge">Pick the Winner</span></h2>
         </div>
-        <div class="cards-grid" id="games-grid">
-          <!-- injected by JS -->
-        </div>
+        <div class="cards-grid" id="games-grid"></div>
       </section>
 
-      <!-- SECTION: PLAYER PROPS (over/under) -->
       <section class="picks-section" id="props-section">
         <div class="section-header">
           <h2>Player Props <span class="badge">Over / Under</span></h2>
         </div>
-        <div class="cards-grid" id="props-grid">
-          <!-- injected by JS -->
-        </div>
+        <div class="cards-grid" id="props-grid"></div>
       </section>
 
     </div>
@@ -102,7 +94,7 @@
       <div class="my-picks-wrapper">
         <h2>My Submitted Entries</h2>
         <div id="my-picks-list">
-          <p class="empty-msg">No entries yet. Make some picks!</p>
+          <p class="empty-msg">Sign in to see your picks.</p>
         </div>
       </div>
     </div>
@@ -111,8 +103,8 @@
     <div class="tab-content hidden" id="tab-leaderboard">
       <div class="leaderboard-wrapper">
         <div class="leaderboard-header">
-          <h2>Leaderboard</h2>
-          <span class="lb-subtitle">Updated after game results</span>
+          <h2 id="lb-title">Global Leaderboard</h2>
+          <span class="lb-subtitle">Live · updates in real time</span>
         </div>
         <div class="lb-table-wrap">
           <table class="lb-table">
@@ -126,24 +118,29 @@
                 <th>Streak</th>
               </tr>
             </thead>
-            <tbody id="leaderboard-body">
-              <!-- injected by JS -->
-            </tbody>
+            <tbody id="leaderboard-body"></tbody>
           </table>
         </div>
+        <button class="btn-secondary lb-back-btn hidden" id="lb-back-global">← Global Leaderboard</button>
+      </div>
+    </div>
+
+    <!-- GROUPS TAB -->
+    <div class="tab-content hidden" id="tab-groups">
+      <div id="groups-content">
+        <p class="empty-msg">Sign in to use groups.</p>
       </div>
     </div>
 
   </main>
 
-  <!-- ENTRY SLIP (sidebar) -->
+  <!-- ENTRY SLIP -->
   <div class="entry-slip" id="entry-slip">
     <div class="slip-header">
       <span>Entry Slip</span>
       <button class="clear-slip" id="clear-slip">Clear</button>
     </div>
 
-    <!-- Wager selector -->
     <div class="wager-section">
       <div class="wager-label">🪙 Wager</div>
       <div class="wager-buttons">
@@ -154,7 +151,6 @@
       </div>
     </div>
 
-    <!-- Multiplier tiers -->
     <div class="tier-grid">
       <div class="tier-item" style="--tc:#64748b"><span class="tier-picks">1</span><span class="tier-mult">1.5×</span></div>
       <div class="tier-item" style="--tc:#22c55e"><span class="tier-picks">2</span><span class="tier-mult">3×</span></div>
@@ -177,6 +173,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -888,6 +888,42 @@ main {
   letter-spacing: 1px;
 }
 
+/* ===== GROUPS ===== */
+.groups-wrapper { max-width: 700px; display: flex; flex-direction: column; gap: 20px; }
+.groups-actions { display: flex; gap: 10px; }
+
+.btn-secondary {
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text2);
+  padding: 9px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent2); }
+.btn-sm { padding: 6px 14px; font-size: 0.8rem; }
+
+.group-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.group-card:hover { border-color: var(--accent); }
+.group-name { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.group-meta { font-size: 0.78rem; color: var(--text3); }
+.group-meta strong { color: var(--accent2); }
+
+.lb-back-btn { margin-top: 14px; }
+.lb-back-btn.hidden { display: none; }
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed;
