@@ -57,8 +57,8 @@ async function fbGetUserEntries(username) {
 // ── Constants ────────────────────────────────────────────────
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
 const NBA_BOXSCORE_BASE = 'https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_';
-const STARTING_COINS = 1000;
-const WAGER_OPTIONS  = [50, 100, 250, 500];
+const STARTING_COINS = 1000;  // cents → $10.00
+const WAGER_OPTIONS  = [50, 100, 250, 500];  // cents → $0.50, $1.00, $2.50, $5.00
 const COIN_TIERS = [
   { picks:1, mult:1.5,  color:'#64748b' },
   { picks:2, mult:3,    color:'#22c55e' },
@@ -293,6 +293,9 @@ let state = {
 };
 
 // ── Utils ────────────────────────────────────────────────────
+function fmtMoney(cents) {
+  return '$' + (cents / 100).toFixed(2);
+}
 function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -377,8 +380,8 @@ async function doLoginWithName(rawName, silent=false) {
     if (!silent) {
       showToast(
         isNew
-          ? `Welcome, ${name}! You have 🪙${STARTING_COINS.toLocaleString()} to start`
-          : `Welcome back, ${name}! 🪙${userData.coins.toLocaleString()}`,
+          ? `Welcome, ${name}! You have ${fmtMoney(STARTING_COINS)} to start`
+          : `Welcome back, ${name}! ${fmtMoney(userData.coins||0)}`,
         'success'
       );
     }
@@ -401,7 +404,7 @@ async function doLoginWithName(rawName, silent=false) {
       state.user = { username:name, coins:STARTING_COINS, correct:0, total:0, streak:0, groups:[], createdAt:Date.now() };
       saveUserLocal();
       applyUser();
-      if (!silent) showToast(`Signed in as ${name} (offline mode)`, 'success');
+      if (!silent) showToast(`Signed in as ${name} (offline mode) — ${fmtMoney(STARTING_COINS)}`, 'success');
     }
   }
 }
@@ -409,7 +412,7 @@ async function doLoginWithName(rawName, silent=false) {
 function applyUser() {
   document.getElementById('username-display').textContent = state.user.username;
   document.getElementById('login-btn').textContent = 'Sign Out';
-  document.getElementById('coin-display').textContent = (state.user.coins||0).toLocaleString();
+  document.getElementById('coin-display').textContent = fmtMoney(state.user.coins||0);
 }
 
 function getCoins() { return state.user ? (state.user.coins||0) : 0; }
@@ -417,7 +420,7 @@ async function setCoins(n) {
   if (!state.user) return;
   const val = Math.max(0, Math.round(n));
   state.user.coins = val;
-  document.getElementById('coin-display').textContent = val.toLocaleString();
+  document.getElementById('coin-display').textContent = fmtMoney(val);
   try { await fbUpdateCoins(state.user.username, val); } catch(e) { console.warn('setCoins Firestore error:', e.message); }
 }
 
@@ -754,7 +757,7 @@ function renderSlipPayout(count) {
   const tier=COIN_TIERS.find(t=>t.picks===count)||COIN_TIERS[COIN_TIERS.length-1];
   const payout=Math.round(state.wager*tier.mult);
   el.style.display='flex';
-  el.innerHTML=`<span>Payout (${count} pick${count>1?'s':''})</span><span style="color:${tier.color};font-weight:700">🪙 ${payout.toLocaleString()}</span>`;
+  el.innerHTML=`<span>Payout (${count} pick${count>1?'s':''})</span><span style="color:${tier.color};font-weight:700">${fmtMoney(payout)}</span>`;
 }
 function initSlip() {
   document.getElementById('clear-slip').addEventListener('click',clearSlip);
@@ -784,7 +787,7 @@ async function submitEntry() {
   const count=Object.keys(state.picks).length;
   if (count===0) return showToast('Add at least 1 pick','error');
   const coins=getCoins();
-  if (coins<state.wager) return showToast(`Not enough coins! You have 🪙${coins}`,'error');
+  if (coins<state.wager) return showToast(`Not enough funds! You have ${fmtMoney(coins)}`,'error');
 
   const tier=COIN_TIERS.find(t=>t.picks===count)||COIN_TIERS[COIN_TIERS.length-1];
   const potentialPayout=Math.round(state.wager*tier.mult);
@@ -807,7 +810,7 @@ async function submitEntry() {
   const full = { fbId:ref.id, ...entry };
   state.entries.unshift(full);
   clearSlip();
-  showToast(`Entry submitted! Wagered 🪙${state.wager} · potential 🪙${potentialPayout.toLocaleString()}`,'success');
+  showToast(`Entry submitted! Wagered ${fmtMoney(state.wager)} · potential ${fmtMoney(potentialPayout)}`,'success');
   switchTab('my-picks');
   scheduleResultCheck(ref.id);
 }
@@ -871,9 +874,9 @@ async function checkEntryResults(fbEntryId) {
   // Payout: win gets potentialPayout, loss gets nothing
   if (allCorrect) {
     await setCoins(getCoins()+entry.potentialPayout);
-    showToast(`💰 ALL CORRECT! +🪙${entry.potentialPayout.toLocaleString()} credited!`,'success');
+    showToast(`💰 ALL CORRECT! +${fmtMoney(entry.potentialPayout)} credited!`,'success');
   } else {
-    showToast(`Results in — ${correct}/${total} correct. 🪙${entry.wager} lost.`);
+    showToast(`Results in — ${correct}/${total} correct. ${fmtMoney(entry.wager)} lost.`);
   }
 
   // Update Firestore entry
@@ -930,6 +933,7 @@ function populateLbTable(users) {
     tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">No players yet</td></tr>'; return;
   }
   users.forEach((u,i)=>{
+    if (!u || !u.username) return;
     const rank=i+1;
     const acc=u.total>0?((u.correct/u.total)*100).toFixed(1):'0.0';
     const isMe=state.user&&u.username===state.user.username;
@@ -941,7 +945,7 @@ function populateLbTable(users) {
     tr.innerHTML=`
       <td><span class="lb-rank ${rankClass}">${rankIcon}</span></td>
       <td><span class="lb-username">${u.username}${isMe?'<span class="lb-me-badge">YOU</span>':''}</span></td>
-      <td class="lb-coins">🪙 ${(u.coins||0).toLocaleString()}</td>
+      <td class="lb-coins">${fmtMoney(u.coins||0)}</td>
       <td>${u.correct||0}</td>
       <td class="lb-accuracy">${acc}%</td>
       <td class="lb-streak">${streakStr}</td>`;
@@ -1065,23 +1069,25 @@ function renderMyPicks() {
 
   container.innerHTML='';
   state.entries.forEach(entry=>{
+    const payout = entry.potentialPayout || 0;
+    const wager  = entry.wager || 0;
     const sc=entry.status==='won'?'won':entry.status==='lost'?'lost':'pending';
     const sl=entry.status==='won'?'Won':entry.status==='lost'?'Lost':'Pending';
-    const coinResult=entry.status==='won'
-      ?`<span style="color:var(--green);font-weight:700">+🪙${entry.potentialPayout.toLocaleString()}</span>`
+    const moneyResult=entry.status==='won'
+      ?`<span style="color:var(--green);font-weight:700">+${fmtMoney(payout)}</span>`
       :entry.status==='lost'
-      ?`<span style="color:var(--red)">-🪙${entry.wager}</span>`
-      :`<span style="color:var(--yellow)">🪙${entry.wager} wagered</span>`;
+      ?`<span style="color:var(--red)">-${fmtMoney(wager)}</span>`
+      :`<span style="color:var(--yellow)">${fmtMoney(wager)} wagered</span>`;
 
     const card=document.createElement('div'); card.className='entry-card';
     card.innerHTML=`
       <div class="entry-card-header">
         <div><strong>Entry #${String(entry.createdAt||entry.fbId).slice(-4)}</strong><span> · ${entry.date} at ${entry.submittedAt}</span></div>
-        <div style="display:flex;align-items:center;gap:10px">${coinResult}<span class="entry-status ${sc}">${sl}</span></div>
+        <div style="display:flex;align-items:center;gap:10px">${moneyResult}<span class="entry-status ${sc}">${sl}</span></div>
       </div>
       <div class="entry-picks-list" id="picks-list-${entry.fbId}"></div>
       <div style="font-size:0.78rem;color:var(--text3);margin-top:4px">
-        Wager: 🪙${entry.wager} · Potential: 🪙${entry.potentialPayout.toLocaleString()} · ${entry.mult}× multiplier
+        Wager: ${fmtMoney(wager)} · Potential: ${fmtMoney(payout)} · ${entry.mult||1}× multiplier
       </div>`;
     container.appendChild(card);
     renderPickRows(entry);
