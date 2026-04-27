@@ -257,7 +257,8 @@ main {
   gap: 6px;
   flex: 1;
 }
-.team-logo { font-size: 2.2rem; line-height: 1; }
+.team-logo { font-size: 2.2rem; line-height: 1; display:flex; align-items:center; justify-content:center; width:56px; height:56px; }
+.team-logo img { object-fit:contain; }
 .team-abbr { font-size: 0.8rem; font-weight: 700; color: var(--text2); }
 .team-score { font-size: 1.5rem; font-weight: 800; }
 .team-score.empty { color: var(--text3); font-size: 1rem; }
@@ -328,15 +329,17 @@ main {
 .player-avatar {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--surface2);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.4rem;
   flex-shrink: 0;
+  overflow: hidden;
 }
+.player-avatar img { width:38px; height:38px; object-fit:contain; }
 
 .player-info { flex: 1; }
 .player-name { font-size: 0.95rem; font-weight: 700; }
@@ -702,6 +705,13 @@ main {
   border-radius: 6px;
   padding: 5px 2px;
   cursor: default;
+  transition: all 0.2s;
+}
+.tier-item.active-tier {
+  border-color: var(--tc, var(--accent));
+  background: rgba(255,255,255,0.06);
+  transform: scale(1.08);
+  box-shadow: 0 0 8px rgba(0,0,0,0.4);
 }
 .tier-picks {
   font-size: 0.85rem;
@@ -958,3 +968,83 @@ main {
 @media (max-width: 600px) {
   .cards-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== TEAM STATS PANEL (game cards) ===== */
+.stats-toggle-row { display:flex; justify-content:flex-end; }
+.stats-toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stats-toggle-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+.team-stats-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: -4px;
+}
+.stats-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stats-col-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.stats-player-row { margin-bottom: 8px; }
+.stats-player-name { font-size: 0.78rem; font-weight: 600; color: var(--text2); display:block; margin-bottom: 3px; }
+.stat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.stat-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  color: var(--text3);
+}
+.stat-chip strong { color: var(--yellow); }
+
+/* ===== PLAYER STATS PANEL (prop cards) ===== */
+.player-stats-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  color: var(--text3);
+}
+.player-stats-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+.player-stats-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.prop-stat-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+.prop-stat-detail-row:last-child { border-bottom: none; }
+.prop-stat-detail-label { color: var(--text3); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.4px; }
+.prop-stat-detail-val { color: var(--yellow); font-weight: 700; }

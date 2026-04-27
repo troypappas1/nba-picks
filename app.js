@@ -313,12 +313,21 @@ function showToast(msg, type='') {
   setTimeout(()=>t.classList.remove('show'), 3200);
 }
 
-// keep username in localStorage so we auto-login on reload
+// keep username + coins in localStorage so balance persists offline
 function saveUserLocal() {
-  if (state.user) localStorage.setItem('hoopp_username', state.user.username);
-  else            localStorage.removeItem('hoopp_username');
+  if (state.user) {
+    localStorage.setItem('hoopp_username', state.user.username);
+    localStorage.setItem('hoopp_coins', String(state.user.coins || 0));
+    localStorage.setItem('hoopp_entries', JSON.stringify(state.entries || []));
+  } else {
+    localStorage.removeItem('hoopp_username');
+    localStorage.removeItem('hoopp_coins');
+    localStorage.removeItem('hoopp_entries');
+  }
 }
 function getSavedUsername() { return localStorage.getItem('hoopp_username'); }
+function getSavedCoins()    { const v=localStorage.getItem('hoopp_coins'); return v!=null?parseInt(v,10):null; }
+function getSavedEntries()  { try { return JSON.parse(localStorage.getItem('hoopp_entries')||'[]'); } catch { return []; } }
 
 // ── Auth ──────────────────────────────────────────────────────
 function initAuth() {
@@ -386,8 +395,13 @@ async function doLoginWithName(rawName, silent=false) {
       );
     }
 
-    // Load this user's entries from Firestore
-    state.entries = await fbGetUserEntries(name);
+    // Load this user's entries from Firestore, fall back to localStorage cache
+    try {
+      state.entries = await fbGetUserEntries(name);
+      localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
+    } catch {
+      state.entries = getSavedEntries();
+    }
     renderMyPicks();
     renderGroupsTab();
 
@@ -396,15 +410,18 @@ async function doLoginWithName(rawName, silent=false) {
 
   } catch(err) {
     console.error('Login error:', err);
-    // If Firestore is blocked (rules not set yet), still let them use the app locally
     if (err.code === 'permission-denied' || err.message?.includes('permission')) {
       showToast('⚠️ Firebase rules not configured yet — see setup instructions', 'error');
     } else {
-      // Fall back to local-only mode so UI isn't broken
-      state.user = { username:name, coins:STARTING_COINS, correct:0, total:0, streak:0, groups:[], createdAt:Date.now() };
+      // Fall back to cached balance + entries so nothing is lost offline
+      const cachedCoins = getSavedCoins();
+      const coins = cachedCoins != null ? cachedCoins : STARTING_COINS;
+      state.user = { username:name, coins, correct:0, total:0, streak:0, groups:[], createdAt:Date.now() };
+      state.entries = getSavedEntries().filter(e => e.username === name);
       saveUserLocal();
       applyUser();
-      if (!silent) showToast(`Signed in as ${name} (offline mode) — ${fmtMoney(STARTING_COINS)}`, 'success');
+      renderMyPicks();
+      if (!silent) showToast(`Signed in as ${name} — ${fmtMoney(coins)}`, 'success');
     }
   }
 }
@@ -421,6 +438,7 @@ async function setCoins(n) {
   const val = Math.max(0, Math.round(n));
   state.user.coins = val;
   document.getElementById('coin-display').textContent = fmtMoney(val);
+  localStorage.setItem('hoopp_coins', String(val));
   try { await fbUpdateCoins(state.user.username, val); } catch(e) { console.warn('setCoins Firestore error:', e.message); }
 }
 
@@ -593,6 +611,37 @@ async function buildPropsFromGames(games) {
   return props;
 }
 
+function buildTeamStatsHtml(abbr) {
+  const stars = TEAM_STARS[abbr] || [];
+  if (!stars.length) return '<p style="color:var(--text3);font-size:0.75rem">No data</p>';
+  // Group by player name
+  const byPlayer = {};
+  stars.forEach(s => {
+    if (!byPlayer[s.n]) byPlayer[s.n] = [];
+    byPlayer[s.n].push(s);
+  });
+  return Object.entries(byPlayer).map(([name, lines]) => {
+    const statChips = lines.map(l => `<span class="stat-chip">${l.s}: <strong>${l.l}</strong></span>`).join('');
+    return `<div class="stats-player-row"><span class="stats-player-name">${name}</span><div class="stat-chips">${statChips}</div></div>`;
+  }).join('');
+}
+
+function buildPlayerStatsHtml(playerName) {
+  const rows = [];
+  for (const stars of Object.values(TEAM_STARS)) {
+    for (const s of stars) {
+      if (s.n.toLowerCase() === playerName.toLowerCase()) rows.push(s);
+    }
+  }
+  if (!rows.length) return '<p style="color:var(--text3);font-size:0.75rem">No season data available</p>';
+  return rows.map(s => `<div class="prop-stat-detail-row"><span class="prop-stat-detail-label">${s.s}</span><span class="prop-stat-detail-val">${s.l} avg</span></div>`).join('');
+}
+
+function teamLogoImg(abbr, size=48) {
+  const lower = abbr.toLowerCase();
+  return `<img src="https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/${lower}.png" alt="${abbr}" width="${size}" height="${size}" style="object-fit:contain" onerror="this.style.display='none';this.nextSibling.style.display='inline'"><span style="display:none;font-size:${size*0.55}px">${TEAM_EMOJI[abbr]||'🏀'}</span>`;
+}
+
 // ── Render Games ──────────────────────────────────────────────
 function renderGames(games) {
   const grid = document.getElementById('games-grid');
@@ -609,6 +658,9 @@ function renderGames(games) {
     else              statusHtml=`<span class="game-time">${game.time}</span>`;
     const seriesBadge = game.seriesText?`<span class="series-badge">${game.seriesText}</span>`:'';
 
+    const awayStars = buildTeamStatsHtml(game.visitor_team.abbreviation);
+    const homeStars = buildTeamStatsHtml(game.home_team.abbreviation);
+
     const card = document.createElement('div');
     card.className='game-card';
     card.innerHTML=`
@@ -618,14 +670,14 @@ function renderGames(games) {
       </div>
       <div class="game-matchup">
         <div class="team-side">
-          <div class="team-logo">${ae}</div>
+          <div class="team-logo">${teamLogoImg(game.visitor_team.abbreviation,52)}</div>
           <div class="team-abbr">${game.visitor_team.abbreviation}</div>
           <div class="team-name-small">${game.visitor_team.full_name}</div>
           <div class="team-score ${showScores?'':'empty'}">${showScores?as:'—'}</div>
         </div>
         <div class="vs-badge"><span>@</span></div>
         <div class="team-side">
-          <div class="team-logo">${he}</div>
+          <div class="team-logo">${teamLogoImg(game.home_team.abbreviation,52)}</div>
           <div class="team-abbr">${game.home_team.abbreviation}</div>
           <div class="team-name-small">${game.home_team.full_name}</div>
           <div class="team-score ${showScores?'':'empty'}">${showScores?hs:'—'}</div>
@@ -634,13 +686,29 @@ function renderGames(games) {
       <div class="pick-buttons">
         <button class="pick-btn" data-game="${game.id}" data-pick="away"
           data-label="${game.visitor_team.full_name}" data-detail="${game.visitor_team.abbreviation} to win">
-          ${ae} ${game.visitor_team.abbreviation} Win
+          ${game.visitor_team.abbreviation} Win
         </button>
         <button class="pick-btn" data-game="${game.id}" data-pick="home"
           data-label="${game.home_team.full_name}" data-detail="${game.home_team.abbreviation} to win">
-          ${he} ${game.home_team.abbreviation} Win
+          ${game.home_team.abbreviation} Win
         </button>
+      <div class="stats-toggle-row">
+        <button class="stats-toggle-btn" data-away="${game.visitor_team.abbreviation}" data-home="${game.home_team.abbreviation}">📊 Team Stats</button>
+      </div>
+      <div class="team-stats-panel" style="display:none">
+        <div class="stats-two-col">
+          <div class="stats-col"><div class="stats-col-header">${game.visitor_team.abbreviation}</div>${awayStars}</div>
+          <div class="stats-col"><div class="stats-col-header">${game.home_team.abbreviation}</div>${homeStars}</div>
+        </div>
       </div>`;
+
+    card.querySelector('.stats-toggle-btn').addEventListener('click', () => {
+      const panel = card.querySelector('.team-stats-panel');
+      const btn   = card.querySelector('.stats-toggle-btn');
+      const open  = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '📊 Team Stats' : '▲ Hide Stats';
+    });
 
     card.querySelectorAll('.pick-btn').forEach(btn => {
       const pickId=`game_${game.id}_${btn.dataset.pick}`;
@@ -667,20 +735,23 @@ function renderProps(props) {
   const grid = document.getElementById('props-grid');
   grid.innerHTML = '';
   props.forEach(prop => {
+    const playerStats = buildPlayerStatsHtml(prop.name);
     const card = document.createElement('div');
     card.className='prop-card';
     card.innerHTML=`
       <div class="prop-card-top">
-        <div class="player-avatar">${prop.emoji}</div>
+        <div class="player-avatar">${teamLogoImg(prop.team,36)}</div>
         <div class="player-info">
           <div class="player-name">${prop.name}</div>
           <div class="player-team-game">${prop.team} · ${prop.game}</div>
         </div>
+        <button class="player-stats-btn" title="Season averages">📊</button>
       </div>
+      <div class="player-stats-panel" style="display:none">${playerStats}</div>
       <div class="prop-stat-row">
         <span class="prop-stat-name">${prop.stat}</span>
         <span class="prop-line">${prop.line}</span>
-        <span class="prop-stat-unit">${prop.stat.toLowerCase()}</span>
+        <span class="prop-stat-unit">avg / game</span>
       </div>
       <div class="prop-buttons">
         <button class="over-btn" data-prop="${prop.id}">▲ Over ${prop.line}</button>
@@ -692,6 +763,13 @@ function renderProps(props) {
     if (state.picks[underId]) underBtn.classList.add('selected');
     overBtn.addEventListener('click', ()=>toggleProp(overId,underId,overBtn,underBtn,prop,'over'));
     underBtn.addEventListener('click', ()=>toggleProp(underId,overId,underBtn,overBtn,prop,'under'));
+    card.querySelector('.player-stats-btn').addEventListener('click', () => {
+      const panel = card.querySelector('.player-stats-panel');
+      const btn   = card.querySelector('.player-stats-btn');
+      const open  = panel.style.display !== 'none';
+      panel.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '📊' : '▲';
+    });
     grid.appendChild(card);
   });
 }
@@ -753,6 +831,11 @@ function updateSlip() {
 function renderSlipPayout(count) {
   const el=document.getElementById('slip-payout-row');
   if (!el) return;
+  // Highlight active tier cell
+  document.querySelectorAll('.tier-item').forEach(item=>{
+    const picks=parseInt(item.querySelector('.tier-picks')?.textContent||'0',10);
+    item.classList.toggle('active-tier', picks===count && count>0);
+  });
   if (count===0) { el.style.display='none'; return; }
   const tier=COIN_TIERS.find(t=>t.picks===count)||COIN_TIERS[COIN_TIERS.length-1];
   const payout=Math.round(state.wager*tier.mult);
@@ -809,6 +892,7 @@ async function submitEntry() {
   const ref  = await fbAddEntry(entry);
   const full = { fbId:ref.id, ...entry };
   state.entries.unshift(full);
+  localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
   clearSlip();
   showToast(`Entry submitted! Wagered ${fmtMoney(state.wager)} · potential ${fmtMoney(potentialPayout)}`,'success');
   switchTab('my-picks');
@@ -891,6 +975,7 @@ async function checkEntryResults(fbEntryId) {
   state.user.correct=(state.user.correct||0)+correct;
   state.user.total=(state.user.total||0)+total;
   state.user.streak=allCorrect?(state.user.streak||0)+1:0;
+  localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
 
   renderMyPicks();
 }
