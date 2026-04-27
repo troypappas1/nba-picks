@@ -422,18 +422,20 @@ async function setCoins(n) {
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
+function switchTab(tabName) {
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const btn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.getElementById('tab-'+tabName).classList.remove('hidden');
+  if (tabName==='leaderboard') renderLeaderboard('global');
+  if (tabName==='my-picks')    renderMyPicks();
+  if (tabName==='groups')      renderGroupsTab();
+}
+
 function initTabs() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
-      document.getElementById('tab-'+tab).classList.remove('hidden');
-      if (tab==='leaderboard') renderLeaderboard('global');
-      if (tab==='my-picks')    renderMyPicks();
-      if (tab==='groups')      renderGroupsTab();
-    });
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 }
 
@@ -806,7 +808,7 @@ async function submitEntry() {
   state.entries.unshift(full);
   clearSlip();
   showToast(`Entry submitted! Wagered 🪙${state.wager} · potential 🪙${potentialPayout.toLocaleString()}`,'success');
-  renderMyPicks();
+  switchTab('my-picks');
   scheduleResultCheck(ref.id);
 }
 
