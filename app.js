@@ -911,6 +911,22 @@ async function checkEntryResults(fbEntryId) {
   const entry=state.entries.find(e=>e.fbId===fbEntryId);
   if (!entry||entry.status!=='pending') return;
 
+  // Ensure every pick has a result field
+  entry.picks.forEach(p=>{ if(!p.result) p.result='pending'; });
+
+  // Entries older than 2 days with still-pending picks can't be graded
+  // (ESPN scoreboard only shows today's games) — mark as expired
+  const twoDaysMs=2*24*60*60*1000;
+  if (entry.createdAt && Date.now()-entry.createdAt > twoDaysMs) {
+    entry.picks.forEach(p=>{ if(p.result==='pending') p.result='wrong'; });
+    entry.status='lost';
+    entry.correct=entry.picks.filter(p=>p.result==='correct').length;
+    await fbUpdateEntry(fbEntryId,{ status:'lost', correct:entry.correct, picks:entry.picks });
+    localStorage.setItem('hoopp_entries',JSON.stringify(state.entries));
+    renderMyPicks();
+    return;
+  }
+
   let games;
   try {
     const res=await fetch(ESPN_SCOREBOARD+'?_='+Date.now());
@@ -937,7 +953,7 @@ async function checkEntryResults(fbEntryId) {
     .filter(p=>!p.id.startsWith('game_'))
     .map(p=>{
       const detailParts=p.detail.split(' ');
-      const dir=detailParts[0].toLowerCase(); // 'over' or 'under'
+      const dir=detailParts[0].toLowerCase();
       const line=parseFloat(detailParts[1]);
       const stat=detailParts.slice(2).join(' ').toLowerCase();
       const teamAbbr=findPlayerTeam(p.label);
@@ -950,6 +966,7 @@ async function checkEntryResults(fbEntryId) {
   gamePicks.forEach(({gameId})=>relevantGameIds.add(gameId));
   propPicks.forEach(({game})=>{ if(game) relevantGameIds.add(String(game.id)); });
 
+  // No relevant games found in today's scoreboard → retry later (game may not have started)
   if (relevantGameIds.size===0) { setTimeout(()=>checkEntryResults(fbEntryId),60000); return; }
 
   const allFinal=[...relevantGameIds].every(id=>{ const g=gameMap[id]; return g&&g.status==='final'; });
@@ -1184,15 +1201,22 @@ async function joinGroup(code) {
 // ── My Picks ──────────────────────────────────────────────────
 function renderMyPicks() {
   const container=document.getElementById('my-picks-list');
+  if (!container) return;
   if (!state.user) { container.innerHTML='<p class="empty-msg">Sign in to see your picks.</p>'; return; }
   if (!state.entries.length) { container.innerHTML='<p class="empty-msg">No entries yet. Make some picks!</p>'; return; }
 
   container.innerHTML='';
-  state.entries.forEach(entry=>{
+  state.entries.forEach((entry,entryIdx)=>{
+    // Ensure picks array exists and every pick has a result
+    if (!Array.isArray(entry.picks)) entry.picks=[];
+    entry.picks.forEach(p=>{ if(!p.result) p.result='pending'; });
+
     const payout = entry.potentialPayout || 0;
     const wager  = entry.wager || 0;
     const sc=entry.status==='won'?'won':entry.status==='lost'?'lost':'pending';
-    const entryNum=String(entry.createdAt||entry.fbId||'').slice(-4)||'—';
+    // Use index as fallback ID so the DOM id is always unique
+    const cardId=entry.fbId||`local-${entryIdx}`;
+    const entryNum=String(entry.createdAt||entry.fbId||'').slice(-4)||String(entryIdx+1);
 
     let resultBadge='';
     if (entry.status==='won') {
@@ -1201,7 +1225,7 @@ function renderMyPicks() {
       resultBadge=`<span class="entry-result-money lost">-${fmtMoney(wager)}</span>`;
     } else {
       const doneCount=entry.picks.filter(p=>p.result!=='pending').length;
-      const pendingNote=doneCount>0?` (${doneCount}/${entry.picks.length} graded)`:' — awaiting results';
+      const pendingNote=doneCount>0?` · ${doneCount}/${entry.picks.length} graded`:' · awaiting results';
       resultBadge=`<span class="entry-result-money pending">${fmtMoney(wager)} wagered${pendingNote}</span>`;
     }
 
@@ -1210,7 +1234,7 @@ function renderMyPicks() {
       <div class="entry-card-header">
         <div class="entry-card-meta">
           <strong class="entry-card-title">Entry #${entryNum}</strong>
-          <span class="entry-card-date">${entry.date} · ${entry.submittedAt||''}</span>
+          <span class="entry-card-date">${entry.date||''} · ${entry.submittedAt||''}</span>
         </div>
         <div class="entry-card-right">
           ${resultBadge}
@@ -1223,14 +1247,15 @@ function renderMyPicks() {
         <span>Multiplier: <strong>${entry.mult||1}×</strong></span>
         <span>Picks: <strong>${entry.picks.length}</strong></span>
       </div>
-      <div class="entry-picks-list" id="picks-list-${entry.fbId}"></div>`;
+      <div class="entry-picks-list" id="picks-list-${cardId}"></div>`;
     container.appendChild(card);
-    renderPickRows(entry);
+    renderPickRows(entry, cardId);
   });
 }
 
-function renderPickRows(entry) {
-  const list=document.getElementById(`picks-list-${entry.fbId}`);
+function renderPickRows(entry, cardId) {
+  const id=cardId||entry.fbId;
+  const list=document.getElementById(`picks-list-${id}`);
   if (!list) return;
   list.innerHTML='';
   entry.picks.forEach((pick,idx)=>{
