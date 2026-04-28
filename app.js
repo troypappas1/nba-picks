@@ -900,9 +900,8 @@ async function submitEntry() {
 }
 
 // ── Result Grading ────────────────────────────────────────────
-// Polls NBA CDN every 60s until all games in the entry are final,
-// then grades picks against real scores.
-// WIN = ALL picks correct → payout credited. LOSS = nothing returned.
+// Polls ESPN every 60s until ALL relevant games are final, then grades
+// every pick (game-winner + player props) and credits/deducts balance.
 
 function scheduleResultCheck(fbEntryId) {
   checkEntryResults(fbEntryId);
@@ -923,7 +922,8 @@ async function checkEntryResults(fbEntryId) {
   const gameMap={};
   games.forEach(g=>{ gameMap[String(g.id)]=g; });
 
-  const gamePickIds=entry.picks
+  // Parse game-winner picks
+  const gamePicks=entry.picks
     .filter(p=>p.id.startsWith('game_'))
     .map(p=>{
       const withoutPrefix=p.id.replace(/^game_/,'');
@@ -932,41 +932,76 @@ async function checkEntryResults(fbEntryId) {
       return { pick:p, gameId:rawId, side };
     });
 
-  // If no game picks, can't grade — keep pending
-  if (gamePickIds.length===0) { setTimeout(()=>checkEntryResults(fbEntryId),60000); return; }
+  // Parse prop picks — extract team from state.props or TEAM_STARS lookup
+  const propPicks=entry.picks
+    .filter(p=>!p.id.startsWith('game_'))
+    .map(p=>{
+      const detailParts=p.detail.split(' ');
+      const dir=detailParts[0].toLowerCase(); // 'over' or 'under'
+      const line=parseFloat(detailParts[1]);
+      const stat=detailParts.slice(2).join(' ').toLowerCase();
+      const teamAbbr=findPlayerTeam(p.label);
+      const game=teamAbbr?games.find(g=>g.home_team.abbreviation===teamAbbr||g.visitor_team.abbreviation===teamAbbr):null;
+      return { pick:p, dir, line, stat, teamAbbr, game };
+    });
 
-  const allFinal=gamePickIds.every(({gameId})=>{ const g=gameMap[gameId]; return g&&g.status==='final'; });
+  // Determine which games need to be final before we can grade
+  const relevantGameIds=new Set();
+  gamePicks.forEach(({gameId})=>relevantGameIds.add(gameId));
+  propPicks.forEach(({game})=>{ if(game) relevantGameIds.add(String(game.id)); });
+
+  if (relevantGameIds.size===0) { setTimeout(()=>checkEntryResults(fbEntryId),60000); return; }
+
+  const allFinal=[...relevantGameIds].every(id=>{ const g=gameMap[id]; return g&&g.status==='final'; });
   if (!allFinal) { setTimeout(()=>checkEntryResults(fbEntryId),60000); return; }
 
-  // Grade each pick
+  // Grade game-winner picks
   let correct=0;
-  gamePickIds.forEach(({pick,gameId,side})=>{
+  gamePicks.forEach(({pick,gameId,side})=>{
     const g=gameMap[gameId];
     if (!g) { pick.result='pending'; return; }
     const homeWon=g.home_team_score>g.visitor_team_score;
     pick.result=(side==='home'===homeWon)?'correct':'wrong';
     if (pick.result==='correct') correct++;
   });
-  // Prop picks stay pending (no box score grading yet)
-  entry.picks.filter(p=>!p.id.startsWith('game_')).forEach(p=>{ if(p.result==='pending') p.result='pending'; });
 
-  const total=gamePickIds.length;
+  // Grade prop picks using box score
+  await Promise.all(propPicks.map(async ({pick,dir,line,stat,game})=>{
+    if (!game) { pick.result='wrong'; return; } // can't verify = loss
+    try {
+      const paddedId=String(game.id).padStart(10,'0');
+      const res=await fetch(`https://nba-prod-us-east-1-mediaops-stats.s3.amazonaws.com/NBA/liveData/boxscore/boxscore_${paddedId}.json?_=${Date.now()}`);
+      const data=await res.json();
+      const allPlayers=[...(data?.game?.homeTeam?.players||[]),...(data?.game?.awayTeam?.players||[])];
+      const playerData=allPlayers.find(p=>
+        p.name?.toLowerCase().includes(pick.label.split(' ').slice(-1)[0].toLowerCase())||
+        pick.label.toLowerCase().includes((p.name||'').toLowerCase())
+      );
+      if (!playerData?.statistics) { pick.result='wrong'; return; }
+      const s=playerData.statistics;
+      const statMap={points:s.points,rebounds:s.reboundsTotal,assists:s.assists,blocks:s.blocks,steals:s.steals};
+      const actual=statMap[stat]??null;
+      if (actual===null) { pick.result='wrong'; return; }
+      pick.result=(dir==='over'?actual>line:actual<line)?'correct':'wrong';
+      if (pick.result==='correct') correct++;
+    } catch { pick.result='wrong'; }
+  }));
+
+  const total=entry.picks.length;
   const allCorrect=correct===total;
   entry.status=allCorrect?'won':'lost';
   entry.correct=correct;
 
-  // Payout: win gets potentialPayout, loss gets nothing
+  // Cash out: all correct wins potentialPayout, otherwise lose the wager
   if (allCorrect) {
     await setCoins(getCoins()+entry.potentialPayout);
-    showToast(`💰 ALL CORRECT! +${fmtMoney(entry.potentialPayout)} credited!`,'success');
+    showToast(`ALL CORRECT! +${fmtMoney(entry.potentialPayout)} credited!`,'success');
   } else {
     showToast(`Results in — ${correct}/${total} correct. ${fmtMoney(entry.wager)} lost.`);
   }
 
-  // Update Firestore entry
   await fbUpdateEntry(fbEntryId,{ status:entry.status, correct, picks:entry.picks });
 
-  // Update user stats in Firestore
   await fbSetUser(state.user.username,{
     correct: (state.user.correct||0)+correct,
     total:   (state.user.total||0)+total,
@@ -1157,23 +1192,38 @@ function renderMyPicks() {
     const payout = entry.potentialPayout || 0;
     const wager  = entry.wager || 0;
     const sc=entry.status==='won'?'won':entry.status==='lost'?'lost':'pending';
-    const sl=entry.status==='won'?'Won':entry.status==='lost'?'Lost':'Pending';
-    const moneyResult=entry.status==='won'
-      ?`<span style="color:var(--green);font-weight:700">+${fmtMoney(payout)}</span>`
-      :entry.status==='lost'
-      ?`<span style="color:var(--red)">-${fmtMoney(wager)}</span>`
-      :`<span style="color:var(--yellow)">${fmtMoney(wager)} wagered</span>`;
+    const entryNum=String(entry.createdAt||entry.fbId||'').slice(-4)||'—';
+
+    let resultBadge='';
+    if (entry.status==='won') {
+      resultBadge=`<span class="entry-result-money won">+${fmtMoney(payout)}</span>`;
+    } else if (entry.status==='lost') {
+      resultBadge=`<span class="entry-result-money lost">-${fmtMoney(wager)}</span>`;
+    } else {
+      const doneCount=entry.picks.filter(p=>p.result!=='pending').length;
+      const pendingNote=doneCount>0?` (${doneCount}/${entry.picks.length} graded)`:' — awaiting results';
+      resultBadge=`<span class="entry-result-money pending">${fmtMoney(wager)} wagered${pendingNote}</span>`;
+    }
 
     const card=document.createElement('div'); card.className='entry-card';
     card.innerHTML=`
       <div class="entry-card-header">
-        <div><strong>Entry #${String(entry.createdAt||entry.fbId).slice(-4)}</strong><span> · ${entry.date} at ${entry.submittedAt}</span></div>
-        <div style="display:flex;align-items:center;gap:10px">${moneyResult}<span class="entry-status ${sc}">${sl}</span></div>
+        <div class="entry-card-meta">
+          <strong class="entry-card-title">Entry #${entryNum}</strong>
+          <span class="entry-card-date">${entry.date} · ${entry.submittedAt||''}</span>
+        </div>
+        <div class="entry-card-right">
+          ${resultBadge}
+          <span class="entry-status ${sc}">${sc==='won'?'Won':sc==='lost'?'Lost':'Pending'}</span>
+        </div>
       </div>
-      <div class="entry-picks-list" id="picks-list-${entry.fbId}"></div>
-      <div style="font-size:0.78rem;color:var(--text3);margin-top:4px">
-        Wager: ${fmtMoney(wager)} · Potential: ${fmtMoney(payout)} · ${entry.mult||1}× multiplier
-      </div>`;
+      <div class="entry-footer-stats">
+        <span>Wager: <strong>${fmtMoney(wager)}</strong></span>
+        <span>Potential: <strong>${fmtMoney(payout)}</strong></span>
+        <span>Multiplier: <strong>${entry.mult||1}×</strong></span>
+        <span>Picks: <strong>${entry.picks.length}</strong></span>
+      </div>
+      <div class="entry-picks-list" id="picks-list-${entry.fbId}"></div>`;
     container.appendChild(card);
     renderPickRows(entry);
   });
