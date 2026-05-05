@@ -889,14 +889,21 @@ async function submitEntry() {
     mult:           tier.mult,
   };
 
-  const ref  = await fbAddEntry(entry);
-  const full = { fbId:ref.id, ...entry };
+  let fbId = 'local-' + Date.now();
+  try {
+    const ref = await fbAddEntry(entry);
+    fbId = ref.id;
+  } catch(e) {
+    console.warn('Firestore entry save failed, using local id:', e.message);
+  }
+
+  const full = { fbId, ...entry };
   state.entries.unshift(full);
   localStorage.setItem('hoopp_entries', JSON.stringify(state.entries));
   clearSlip();
   showToast(`Entry submitted! Wagered ${fmtMoney(state.wager)} · potential ${fmtMoney(potentialPayout)}`,'success');
   switchTab('my-picks');
-  scheduleResultCheck(ref.id);
+  if (!fbId.startsWith('local-')) scheduleResultCheck(fbId);
 }
 
 // ── Result Grading ────────────────────────────────────────────
